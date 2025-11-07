@@ -28,6 +28,11 @@ ACALSIM_ROOT = ../..
 ACALSIM_INCLUDE = $(ACALSIM_ROOT)/include
 ACALSIM_LIB = $(ACALSIM_ROOT)/lib
 
+# RISC-V paths
+RISCV_ROOT = $(ACALSIM_ROOT)/src/riscv
+RISCV_INCLUDE = $(RISCV_ROOT)/include
+RISCV_LIBS = $(RISCV_ROOT)/libs
+
 # Include paths
 INCLUDES = -I$(ACALSIM_INCLUDE) \
            -I$(ACALSIM_INCLUDE)/external \
@@ -36,6 +41,8 @@ INCLUDES = -I$(ACALSIM_INCLUDE) \
            -I$(ACALSIM_INCLUDE)/packet \
            -I$(ACALSIM_INCLUDE)/port \
            -I$(ACALSIM_INCLUDE)/channel \
+           -I$(RISCV_INCLUDE) \
+           -I$(RISCV_INCLUDE)/event \
            -I. \
            $(SST_CXXFLAGS)
 
@@ -46,10 +53,25 @@ LIBS = -L$(ACALSIM_LIB) -lacalsim $(SST_LDFLAGS)
 LIBRARY = libacalsim_sst.so
 
 # Source files
-SOURCES = ACALSimComponent.cc
+SOURCES = ACALSimComponent.cc \
+          RISCVSoCComponent.cc \
+          RISCVSoCStandalone.cc
+
+# RISC-V library source files
+RISCV_SOURCES = $(RISCV_LIBS)/BaseMemory.cc \
+                $(RISCV_LIBS)/CPU.cc \
+                $(RISCV_LIBS)/DataMemory.cc \
+                $(RISCV_LIBS)/Emulator.cc \
+                $(RISCV_LIBS)/EXEStage.cc \
+                $(RISCV_LIBS)/IFStage.cc \
+                $(RISCV_LIBS)/InstPacket.cc \
+                $(RISCV_LIBS)/MemPacket.cc \
+                $(RISCV_LIBS)/SOC.cc \
+                $(RISCV_LIBS)/TopPipeRegisterManager.cc
 
 # Object files
 OBJECTS = $(SOURCES:.cc=.o)
+RISCV_OBJECTS = $(RISCV_SOURCES:.cc=.o)
 
 # SST element registration
 ELEMENT_NAME = acalsim
@@ -62,7 +84,7 @@ ELEMENT_LIB = $(ELEMENT_NAME)
 all: $(LIBRARY)
 
 # Build the SST element library
-$(LIBRARY): $(OBJECTS)
+$(LIBRARY): $(OBJECTS) $(RISCV_OBJECTS)
 	@echo "Linking SST element library: $@"
 	$(CXX) -shared -o $@ $^ $(LIBS)
 	@echo "Build complete: $@"
@@ -101,7 +123,7 @@ examples:
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -f $(OBJECTS) $(LIBRARY)
+	rm -f $(OBJECTS) $(RISCV_OBJECTS) $(LIBRARY)
 	rm -f *.o *.so
 	@echo "Clean complete."
 
@@ -127,6 +149,14 @@ help:
 	@echo "  make test         # Verify installation"
 	@echo "  sst examples/simple_system.py  # Run example"
 
+# Build examples
+examples-riscv:
+	@echo "RISC-V Example Python configurations:"
+	@echo "  sst examples/riscv_single_core.py"
+	@echo "  sst examples/riscv_dual_core.py"
+
 # ========== Dependencies ==========
 
 ACALSimComponent.o: ACALSimComponent.cc ACALSimComponent.hh
+RISCVSoCComponent.o: RISCVSoCComponent.cc RISCVSoCComponent.hh
+RISCVSoCStandalone.o: RISCVSoCStandalone.cc RISCVSoCStandalone.hh
