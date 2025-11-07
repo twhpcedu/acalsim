@@ -1,0 +1,27 @@
+Language: Cpp
+BasedOnStyle: Google
+
+AccessModifierOffset: -4
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveMacros: Consecutive
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+ColumnLimit: 120
+DerivePointerAlignment: false
+IndentWidth: 4
+PointerAlignment: Left
+UseTab: ForIndentation
+TabWidth: 4
+SortIncludes: true
+---
+Language: Json
+# Don't format .json files.
+DisableFormat: true
+---
+Language: JavaScript
+# Don't format .js files.
+DisableFormat: true

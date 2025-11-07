@@ -1,0 +1,194 @@
+# Copyright 2023-2025 Playlab/ACAL
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ===================================================================
+# If the register a0 is zero, it means all tests pass (a0 = 0x00000000).
+# If the register a0 is non-zero, its value indicates the failing test number.
+# ===================================================================
+.data
+data1:  .word  0
+data2:  .word  0
+data9:  .word  0x66
+.text
+# ===================================================================
+# Test1: Test the correctness of load/store.
+#  - Use sb to write to memory, then use lw to read it back,
+#    and check if the value read is correct.
+# ===================================================================
+  addi x0, x0, 0
+test1:
+  la t1, data1
+  addi t2, x0, 0x55
+  sb t2, 0(t1)
+  lw t3, 0(t1)
+  addi t4, x0, 0x55
+  beq t3, t4, pass1
+  addi a0, x0, 1
+  beq x0, x0, fail
+pass1:
+  beq x0, x0, test2
+# ===================================================================
+# Test2: Test data hazard in WB stage (rd == ID stage's rs1/rs2).
+#  - Two instructions: the previous one writes rd in WB,
+#    while the next one reads rd in ID.
+# ===================================================================
+test2:
+  addi t1, x0, 5
+  addi x0, x0, 0
+  addi x0, x0, 0
+  add t2, t1, t1
+  addi x0, x0, 0
+  addi x0, x0, 0
+  add t3, t2, x0
+  addi t4, x0, 10
+  beq t3, t4, pass2
+  addi a0, x0, 2
+  beq x0, x0, fail
+pass2:
+  beq x0, x0, test3
+# ===================================================================
+# Test3: Test data hazard in MEM stage (rd == ID stage's rs1/rs2).
+#  - Two instructions: the previous one writes rd in MEM,
+#    while the next one reads rd in ID.
+# ===================================================================
+test3:
+  addi t1, x0, 5
+  addi x0, x0, 0
+  add t2, t1, t1
+  addi x0, x0, 0
+  add t3, t2, x0
+  addi t4, x0, 10
+  beq t3, t4, pass3
+  addi a0, x0, 3
+  beq x0, x0, fail
+pass3:
+  beq x0, x0, test4
+# ===================================================================
+# Test4: Test data hazard in EX stage (rd == ID stage's rs1/rs2).
+#  - Two consecutive instructions: the previous one writes rd in EXE,
+#    while the next one reads rd in ID.
+# ===================================================================
+test4:
+  addi t1, x0, 5
+  add t2, t1, t1
+  add t3, t2, x0
+  addi t4, x0, 10
+  beq t3, t4, pass4
+  addi a0, x0, 4
+  beq x0, x0, fail
+pass4:
+  beq x0, x0, test5
+# ============================================================================
+# Test5: Test data hazard (all EX, MEM, WB stages consecutively writing the same rd,
+#        then reading it immediately)
+#  - Multiple consecutive instructions write t1, and the last one reads t1
+#    in the ID stage, testing multi-stage pipeline hazards.
+# ===================================================================
+test5:
+  addi t1, x0, 1
+  add t1, t1, t1
+  add t1, t1, t1
+  add t1, t1, t1
+  add t2, t1, x0
+  addi t3, x0, 8
+  beq t2, t3, pass5
+  addi a0, x0, 5
+  beq x0, x0, fail
+pass5:
+  beq x0, x0, test6
+# ===================================================================
+# Test6: Test correctness when load/store and data hazard occur simultaneously.
+#  - Store a value to memory, load it back immediately,
+#    then use that register right away.
+# ===================================================================
+test6:
+  la t1, data2
+  addi t2, x0, 0x5A
+  sb t2, 0(t1)
+  lw t3, 0(t1)
+  add t4, t3, x0
+  addi t5, x0, 0x5A
+  beq t4, t5, pass6
+  addi a0, x0, 6
+  beq x0, x0, fail
+pass6:
+  beq x0, x0, test7
+# ===================================================================
+# Test7: Test correctness of flush (control hazard).
+#  - Execute a beq that will definitely be taken,
+#    and check if subsequent instructions are correctly flushed.
+# ===================================================================
+test7:
+  addi t1, x0, 0
+  addi t2, x0, 0
+  addi t3, x0, 0
+  beq t1, t2, flush7
+  addi t3, x0, 999
+flush7:
+  addi t4, x0, 111
+  beq t3, x0, correct7
+  addi a0, x0, 7
+  beq x0, x0, fail
+correct7:
+  addi t5, x0, 111
+  beq t4, t5, pass7
+  addi a0, x0, 7
+  beq x0, x0, fail
+pass7:
+  beq x0, x0, test8
+# ===================================================================
+# Test8: Test correctness when flush (jump) and data hazard occur simultaneously.
+#  - Execute a jal that will definitely be taken,
+#    and check if subsequent instructions are correctly flushed.
+# ===================================================================
+test8:
+  addi t1, x0, 10
+  jal t1, flush8
+  add t1, t1, t1
+  addi t1, t1, 5
+flush8:
+  addi t1, x0, 10
+  add t2, t1, x0
+  addi t3, x0, 10
+  beq t2, t3, pass8
+  addi a0, x0, 8
+  beq x0, x0, fail
+pass8:
+  beq x0, x0, test9
+# ===================================================================
+# Test9: Test correctness when flush, memory access, and data hazard occur simultaneously.
+#  - First lw to read a value, then immediately execute a definitely taken branch,
+#    which theoretically requires flushing subsequent instructions. Finally,
+#    check the value just loaded. If flush is incorrect, that value might be changed
+#    by the flushed instructions.
+# ===================================================================
+test9:
+  la t1, data9
+  lw t2, 0(t1)
+  beq t2, t2, flush9
+  add t2, t2, t2
+  addi t2, t2, 1
+flush9:
+  add t3, t2, x0
+  addi t4, x0, 0x66
+  beq t3, t4, pass9
+  addi a0, x0, 9
+  beq x0, x0, fail
+pass9:
+  addi a0, x0, 0
+  beq x0, x0, exit
+fail:
+  beq x0, x0, exit
+exit:
+  hcf

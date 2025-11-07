@@ -1,0 +1,33 @@
+{
+  "ACALSim": {
+    "thread_manager_version": {
+      "type": "ThreadManagerVersion",
+      "version": 3
+    }
+  },
+  "PETile": {
+    "mem_width": 256,
+    "test_for_float": 5.2,
+    "bus_protocol": "TileLink",
+    "bus_req_delay": 10,
+    "bus_resp_delay": 10,
+    "sram_req_delay": 100,
+    "cache_struct": {
+      "type": "CacheStruct",
+      "value": {
+        "associativity": 8,
+        "mem_size": 65536,
+        "replacement_policy": "random",
+        "write_policy": "write_back"
+      }
+    },
+    "bus_struct": {
+      "type": "BusStruct",
+      "value": {
+        "bus_width": 64,
+        "max_outstanding_request": 5,
+        "architecture": "out of order"
+      }
+    }
+  }
+}

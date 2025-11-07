@@ -1,0 +1,27 @@
+{
+  "TestConfig": {
+    "test_int": 1,
+    "test_float": 1.0,
+    "test_string": "This is TestConfig",
+    "test_tick": 1,
+    "test_struct": {
+      "type": "TestStruct",
+      "params": {
+        "test_struct_int": 1,
+        "test_struct_float": 1.0,
+        "test_struct_string": "This is TestStruct",
+        "test_struct_tick": 1,
+        "test_struct_int_enum": 1,
+        "test_struct_str_enum": "1"
+      }
+    },
+    "test_int_enum": {
+      "type": "TestIntEnum",
+      "params": 3
+    },
+    "test_str_enum": {
+      "type": "TestStrEnum",
+      "params": "3"
+    }
+  }
+}

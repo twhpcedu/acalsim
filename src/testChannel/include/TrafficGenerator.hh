@@ -1,0 +1,41 @@
+/*
+ * Copyright 2023-2025 Playlab/ACAL
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include <string>
+
+#include "ACALSim.hh"
+using namespace acalsim;
+
+class TrafficGenerator : public CPPSimBase {
+public:
+	TrafficGenerator(std::string name) : CPPSimBase(name) {}
+	~TrafficGenerator() {}
+	void step() override { CLASS_INFO << "TrafficGenerator executes on thread " << std::this_thread::get_id(); }
+	Tick getRespDelay() { return (Tick)tgRespDelay; }
+	void init() override;
+	void cleanup() override;
+
+protected:
+	static const int tgRespDelay = 1;
+
+	struct SharedData {
+		int                  vInt[10];
+		long                 vLong[10];
+		std::shared_ptr<int> pInt;
+	};
+};

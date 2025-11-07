@@ -1,0 +1,37 @@
+variables:
+  IMAGE_NAME_TAG: "playlabtw/acalsim-workspace:91698f3b"
+
+stages:
+  - pre-commit
+  - regression-test
+
+pre-commit:
+  stage: pre-commit
+  image: ${IMAGE_NAME_TAG}
+  before_script:
+    - sudo chown -R $(id -u):$(id -g) $(pwd)
+    - pre-commit install --install-hooks
+  script:
+    - pre-commit run --all-files
+  tags:
+    - docker
+
+regression-test:
+  stage: regression-test
+  image: ${IMAGE_NAME_TAG}
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+    GIT_SUBMODULE_FORCE_HTTPS: "true"
+  before_script:
+    - sudo chown -R $(id -u):$(id -g) $(pwd)
+    - bash "scripts/gen-models.sh"
+  script:
+    - python "scripts/regression.py"
+  artifacts:
+    name: regression-logs
+    paths:
+      - build/regression
+    when: always
+    expire_in: 1 week
+  tags:
+    - docker

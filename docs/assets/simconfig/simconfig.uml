@@ -1,0 +1,83 @@
+class SimTop {
+    + initConfig()
+    + registerConfigs() {abstract}
+}
+
+class CLIManager{
+    # tracingJsonFileName: std::string
+    # configFilePath: std::string
+    # gTestMode: bool
+    - app: CLI::App
+    - cliParameters: std::vector<CLIParameter>
+    + isGTestMode()
+    # registerCLIArguments() {abstract}
+    # registerACALSimCLIArguments()
+    # getCLIApp(): CLI::App*
+    # setCLIParametersToSimConfig()
+    # addCLIOption(): CLI::Option*
+    # parseCLIArguments()
+    - addCLIParameter()
+}
+
+struct CLIParameter {
+    + config: std::string
+    + param: std::string
+    + updateFunc: std::function<void()>
+    + operator()
+}
+
+class SimConfigManager {
+    - configs: unordered_map<std::string, SimConfig*>
+    + getParameter() : template<T>
+    + getParameterMemberData() : template<T_Stuct, T_Member>
+    # updateParameter() : template <T_Type, T_Struct = void>
+    # parseConfigFile()
+    # addConfig()
+    # registerConfigs()  {abstract}
+    - getConfig(): SimConfig*
+}
+
+class SimConfig {
+    - name: std::string
+    - parameters: unordered_map<std::string, ParameterBase*>
+    + getName() const: std::string
+    + addParameter() : template<T>
+    + setParameter() : template<T>
+    + setParameterMemberData() : template <T_Struct, T_Member>
+    + getParameter() : template<T>
+    + getParameterMemberData() : template <T_Struct, T_Member>
+    + parseParameters()
+    + parseParametersUserDefined() {abstract}
+}
+
+class ParameterBase {
+    - name: std::string
+    - type: ParamType
+    + getName(): std::string
+    + getType(): ParamType
+}
+
+class Parameter {
+    - value: template<T>
+    + setValue(): template<U, V = T>
+    + getValue(): template<U, V = T>
+}
+
+enum ParamType {
+    + INT
+    + FLOAT
+    + STRING
+    + TICK
+    + USER_DEFINED
+}
+
+SimTop --|> CLIManager
+CLIManager --|> SimConfigManager
+CLIManager *-- CLIParameter
+CLIManager *-- ParameterBase
+Parameter --|> ParameterBase
+SimConfigManager *-- SimConfig
+SimConfig *-- Parameter
+SimConfigManager ..> ParamType
+SimConfig ..> ParamType
+ParameterBase ..> ParamType

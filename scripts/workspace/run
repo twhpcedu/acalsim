@@ -1,0 +1,250 @@
+#!/bin/bash
+
+# Copyright 2023-2025 Playlab/ACAL
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -e
+
+cd "$(dirname "$0")"
+
+# Function to find the root of the top-level Git repository
+find_root_repo_dir() {
+	# Helper function to find the root of a git repository
+	find_git_root() {
+		git rev-parse --show-toplevel 2>/dev/null
+	}
+
+	# Start by finding the current repository's root
+	local current_repo_root
+	current_repo_root="$(find_git_root)"
+
+	# Check if we are in a git repository
+	if [ -z "${current_repo_root}" ]; then
+		# Return the current directory with "/projects" appended
+		echo "${PWD}/projects"
+		return 0
+	fi
+
+	# Navigate up the directory tree to find the parent repo's root
+	while true; do
+		# Go up one directory
+		cd ..
+
+		# Check if we are at the filesystem root
+		if [ "${PWD}" == "/" ]; then
+			break
+		fi
+
+		# Try to find the git root in this new location
+		local new_repo_root
+		new_repo_root="$(find_git_root)"
+
+		# Check if new_repo_root is not empty and different from current_repo_root
+		if [ -n "${new_repo_root}" ] && [ "${new_repo_root}" != "${current_repo_root}" ]; then
+			current_repo_root="${new_repo_root}"
+		fi
+	done
+
+	# Return the root of the top-level Git repository
+	echo "${current_repo_root}"
+	return 0
+}
+
+IMAGE_NAME_BASE="acalsim-workspace"
+IMAGE_NAME="${IMAGE_NAME_BASE}-$(id -un)"
+CONTAINER_NAME_BASE="acalsim-workspace"
+CONTAINER_USERNAME="user"
+CONTAINER_NAME="${CONTAINER_NAME_BASE}-$(id -un)"
+CONTAINER_TIMEZONE=${TZ:-"Asia/Taipei"}
+
+VOLUME_PROJECTS_DIR="$(find_root_repo_dir)"
+VOLUME_SSH_DIR="${PWD}/temp/.ssh"
+VOLUME_VSCODESERVER_DIR="${PWD}/temp/.vscode-server"
+VOLUME_PRECOMMIT_CACHE_DIR="${PWD}/temp/pre-commit"
+VOLUME_CONFIG_DIR="${PWD}/temp/config"
+
+DOCKERHUB_PUSH_TAG_NAME="playlabtw/acalsim-workspace"
+DOCKERHUB_PUSH_TAG_VER="77a62825"
+
+usage_message() {
+	cat <<EOF
+
+    This script will help you manage the Docker Workspace for ACALSim project development.
+    You can execute this script with the following options.
+
+    pull            : pull the official image from DockerHub
+    build           : build an image on this machine
+    start           : pull and enter the workspace
+    stop            : stop and exit the workspace
+    prune           : remove the docker image
+    repull          : remove the existing image and pull one from DockerHub
+    rebuild         : remove the existing image and build a new one to apply your own changes
+
+EOF
+}
+
+### auxiliary functions ###
+check_docker_running() {
+	if docker ps >/dev/null 2>&1; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+check_image_exist() {
+	if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+check_container_running() {
+	if [ "$(docker ps --filter name="${CONTAINER_NAME}" --filter status=running --format=json)" != "" ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+check_container_exist() {
+	if [ "$(docker ps -a --filter name="${CONTAINER_NAME}" --format=json)" != "" ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+### major functions ###
+build_image() {
+	if ! check_image_exist; then
+		docker build \
+			--build-arg BASE_IMAGE_VER="${DOCKERHUB_PUSH_TAG_VER}" \
+			--build-arg UID="$(id -u)" \
+			--build-arg GID="$(id -g)" \
+			--build-arg USERNAME="${CONTAINER_USERNAME}" \
+			--build-arg TZ="${CONTAINER_TIMEZONE}" \
+			-t "${IMAGE_NAME}" . ||
+			{ echo "error due to docker build image" && exit 1; }
+	else
+		echo "There exists image \`${IMAGE_NAME}\`."
+		echo "Use \`run rebuild\` if you want to remove the existing image and build a new one."
+	fi
+}
+
+pull_image() {
+	if ! check_image_exist; then
+		docker pull ${DOCKERHUB_PUSH_TAG_NAME}:${DOCKERHUB_PUSH_TAG_VER}
+		docker tag ${DOCKERHUB_PUSH_TAG_NAME}:${DOCKERHUB_PUSH_TAG_VER} "${IMAGE_NAME}:latest" >/dev/null
+		docker rmi ${DOCKERHUB_PUSH_TAG_NAME}:${DOCKERHUB_PUSH_TAG_VER} >/dev/null
+	else
+		echo "There exists image \`${IMAGE_NAME}\`."
+		echo "Use \`run repull\` if you want to remove the existing image and pull one."
+	fi
+}
+
+start_environment() {
+	if ! check_image_exist; then
+		pull_image
+	fi
+
+	[[ -d ${VOLUME_SSH_DIR} ]] || mkdir -p "${VOLUME_SSH_DIR}"
+	[[ -d ${VOLUME_VSCODESERVER_DIR} ]] || mkdir -p "${VOLUME_VSCODESERVER_DIR}"
+	[[ -d ${VOLUME_PROJECTS_DIR} ]] || mkdir -p "${VOLUME_PROJECTS_DIR}"
+	[[ -d ${VOLUME_PRECOMMIT_CACHE_DIR} ]] || mkdir -p "${VOLUME_PRECOMMIT_CACHE_DIR}"
+	[[ -d ${VOLUME_CONFIG_DIR} ]] || mkdir -p "${VOLUME_CONFIG_DIR}"
+
+	if ! check_container_running; then
+		stop_docker_container
+		docker run -d \
+			-e USERID="$(id -u)" \
+			-e GROUPID="$(id -g)" \
+			-e MOUNT_DIR="${PWD}" \
+			-e TZ="${CONTAINER_TIMEZONE}" \
+			-e HOST_WORK_DIR="${VOLUME_PROJECTS_DIR}" \
+			-v "$([[ ${OSTYPE} == "msys" ]] && echo "/${VOLUME_PROJECTS_DIR}" || echo "${VOLUME_PROJECTS_DIR}")":"/home/${CONTAINER_USERNAME}/$(basename "${VOLUME_PROJECTS_DIR}")/" \
+			-v "$([[ ${OSTYPE} == "msys" ]] && echo "/${VOLUME_SSH_DIR}" || echo "${VOLUME_SSH_DIR}")":"/home/${CONTAINER_USERNAME}/.ssh/" \
+			-v "$([[ ${OSTYPE} == "msys" ]] && echo "/${VOLUME_VSCODESERVER_DIR}" || echo "${VOLUME_VSCODESERVER_DIR}")":"/home/${CONTAINER_USERNAME}/.vscode-server/" \
+			-v "$([[ ${OSTYPE} == "msys" ]] && echo "/${VOLUME_PRECOMMIT_CACHE_DIR}" || echo "${VOLUME_PRECOMMIT_CACHE_DIR}")":"/home/${CONTAINER_USERNAME}/.cache/pre-commit/" \
+			-v "$([[ ${OSTYPE} == "msys" ]] && echo "/${VOLUME_CONFIG_DIR}" || echo "${VOLUME_CONFIG_DIR}")":"/home/${CONTAINER_USERNAME}/.config/" \
+			--hostname "$(echo "${CONTAINER_NAME}" | tr '[:lower:]' '[:upper:]')" \
+			--name "${CONTAINER_NAME}" \
+			"${IMAGE_NAME}" ||
+			{ echo "error due to docker run image" && exit 1; }
+		# Wait until the start routine finished
+		while docker exec "${CONTAINER_NAME}" test ! -f /docker/start.sh.done; do
+			sleep 0.1
+		done
+	fi
+
+	local CMD_SHELL=${USE_SHELL:-"/bin/bash"}
+
+	case ${OSTYPE} in
+	msys)
+		winpty docker exec -it "${CONTAINER_NAME}" "${CMD_SHELL}"
+		;;
+	*)
+		docker exec -it "${CONTAINER_NAME}" "${CMD_SHELL}"
+		;;
+	esac
+}
+
+stop_docker_container() {
+	if check_container_exist; then
+		docker container rm -f "${CONTAINER_NAME}"
+	fi
+}
+
+remove_docker_image() {
+	if check_image_exist; then
+		docker rmi "${IMAGE_NAME}"
+	fi
+}
+
+export DOCKER_SCAN_SUGGEST=false
+
+! check_docker_running && echo "error: please install and start Docker Engine first!!!" && exit 1
+
+case $1 in
+pull)
+	pull_image
+	;;
+build)
+	build_image
+	;;
+start)
+	start_environment
+	;;
+stop)
+	stop_docker_container
+	;;
+prune)
+	stop_docker_container
+	remove_docker_image
+	;;
+repull)
+	stop_docker_container
+	remove_docker_image
+	pull_image
+	;;
+rebuild)
+	stop_docker_container
+	remove_docker_image
+	build_image
+	;;
+*)
+	usage_message
+	;;
+esac

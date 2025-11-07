@@ -1,0 +1,10 @@
+{
+  "Emulator": {
+    "asm_file_path": "src/riscv/asm/branch_simple.txt",
+    "memory_size": 65536,
+    "text_offset": 0,
+    "data_offset": 8192,
+    "max_label_count": 128,
+    "max_src_len": 1048575
+  }
+}

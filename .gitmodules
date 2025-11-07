@@ -1,0 +1,15 @@
+[submodule "third-party/googletest"]
+	path = third-party/googletest
+	url = https://github.com/google/googletest.git
+[submodule "third-party/json"]
+	path = third-party/json
+	url = https://github.com/nlohmann/json.git
+[submodule "third-party/CLI11"]
+	path = third-party/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
+[submodule "third-party/cpp-channel"]
+	path = third-party/cpp-channel
+	url = https://github.com/andreiavrammsd/cpp-channel.git
+[submodule "third-party/systemc"]
+	path = third-party/systemc
+	url = https://github.com/accellera-official/systemc.git

@@ -1,0 +1,12 @@
+{
+  "System": {
+    "testNo": 0,
+    "top": {
+      "type": "TopLevelConfig",
+      "params": {
+        "gridX": 4,
+        "gridY": 4
+      }
+    }
+  }
+}
