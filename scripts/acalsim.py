@@ -834,15 +834,35 @@ PROJ_ARR.append({
     # with varying tick counts, so no single tick validation is performed
 })
 
+# ------------------------------------------------------------------------------
+# SST Integration Tests - RISC-V
+# ------------------------------------------------------------------------------
+# Tests for SST (Structural Simulation Toolkit) integration with RISC-V processor.
+# These tests use SST's Python configuration files and run via the 'sst' command.
+# The SST element library must be built and installed before running these tests.
+# ------------------------------------------------------------------------------
+
+PROJ_ARR.append({
+    "name": "SST RISC-V single core (branch_simple)",
+    "log-name": "sst_riscv_single_core_branch",
+    "src-subdir": "sst-riscv",  # SST integration directory
+    "exec-args": ["examples/riscv_single_core.py"],  # Python config file for SST
+    "compile-mode": "SST",  # Special mode for SST integration tests
+    "pre-steps": [],  # Build/install happens in SST compile mode
+    "post-steps": [],
+    "total-tick": 7  # Expected simulation tick for branch_simple.txt test
+})
+
 # ==============================================================================
 # END OF PROJECT CONFIGURATION ARRAY
 # ==============================================================================
-# Total projects configured: 50+
+# Total projects configured: 51
 # - Production ThreadManager variants: 4 implementations across multiple tests
 # - Experimental ThreadManager variants: 4 implementations under development
 # - Standalone tests: Basic functionality, config, communication, resources
 # - Hardware tests: Accelerator, Channel, SimPort, CrossBar, PETile
 # - SystemC tests: STSim, STSystemC, SimChannel
 # - RISC-V tests: Template, load/store, branch instructions
+# - SST Integration: RISC-V processor in SST framework
 # - Unit tests: Comprehensive framework validation
 # ==============================================================================

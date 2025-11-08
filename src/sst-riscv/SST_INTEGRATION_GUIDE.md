@@ -177,7 +177,7 @@ The integration bridges these two models:
 **Usage:**
 ```bash
 # Build and install
-cd src/sst-integration
+cd src/sst-riscv
 make && make install
 
 # Run RISC-V simulation
@@ -551,7 +551,7 @@ void YourComponentStandalone::finish() {
 
 ### Step 4: Update Makefile
 
-Add your component to `src/sst-integration/Makefile`:
+Add your component to `src/sst-riscv/Makefile`:
 
 ```makefile
 # Add to SOURCES
@@ -596,7 +596,7 @@ print("Running simulation...")
 
 ```bash
 # Build
-cd src/sst-integration
+cd src/sst-riscv
 make clean && make && make install
 
 # Verify installation
@@ -693,7 +693,7 @@ These are internal tests and templates:
 
 ```bash
 # Navigate to SST integration directory
-cd src/sst-integration
+cd src/sst-riscv
 
 # Clean previous builds
 make clean
@@ -965,7 +965,7 @@ To add your integration:
 
 - **SST Documentation:** http://sst-simulator.org/sst-docs/
 - **ACALSim Documentation:** See `docs/` directory
-- **Example Code:** `src/sst-integration/RISCVSoCStandalone.cc`
+- **Example Code:** `src/sst-riscv/RISCVSoCStandalone.cc`
 - **SST Tutorials:** SST-Core repository examples
 
 ---

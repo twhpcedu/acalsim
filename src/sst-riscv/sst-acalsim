@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Wrapper script for running SST with ACALSim components
+# This script sets up the necessary environment and preloads libacalsim.so
+# to work around SST's RTLD_LOCAL plugin loading limitation
+
+# Find the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ACALSIM_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# SST installation
+SST_CORE_HOME="${SST_CORE_HOME:-$ACALSIM_ROOT/sst-core/sst-core-install}"
+
+# Set up paths
+export PATH="$SST_CORE_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$SST_CORE_HOME/lib/sstcore:$ACALSIM_ROOT/build/debug/libs:/usr/lib:$LD_LIBRARY_PATH"
+
+# Preload libacalsim.so to make its symbols globally available
+# This works around SST's RTLD_LOCAL plugin loading which doesn't
+# export symbols from dependencies
+export LD_PRELOAD="$ACALSIM_ROOT/build/debug/libs/libacalsim.so:$LD_PRELOAD"
+
+# Force immediate binding to ensure all symbols are resolved at load time
+export LD_BIND_NOW=1
+
+# Run SST with all arguments passed through
+exec sst "$@"

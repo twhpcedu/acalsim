@@ -106,10 +106,10 @@ BUILD_LOG_FILENAME: str = "build.log"  # Filename for CMake/compilation logs
 EXEC_LOG_FILENAME: str = "exec.log"  # Filename suffix for execution logs
 
 # Build configuration constants
-COMPILE_TYPE_LIST: List[str] = ["Debug", "Release", "GTest"]  # Supported build types
+COMPILE_TYPE_LIST: List[str] = ["Debug", "Release", "GTest", "SST"]  # Supported build types
 IGNORED_COMPILE_TYPE: List[str] = [
-    COMPILE_TYPE_LIST[2]
-]  # Build types that skip CMAKE_BUILD_TYPE flag
+    COMPILE_TYPE_LIST[2], COMPILE_TYPE_LIST[3]
+]  # Build types that skip CMAKE_BUILD_TYPE flag (GTest, SST)
 
 # Regular expressions for log parsing
 COLOR_REGEX: re.Pattern = re.compile(r"\033\[[0-9;]+m")  # Matches ANSI color escape codes
@@ -534,23 +534,50 @@ def exec_proj(
 		# Create log directory structure
 		subprocess.run(["mkdir", "-p", log_dir], check=True)
 
-		# Configure CMake with build type
-		# Note: GTest mode skips CMAKE_BUILD_TYPE flag as it's in IGNORED_COMPILE_TYPE
-		exec_cmd(
-		    cmd=[
-		        "cmake", "-B", build_dir, f"-DCMAKE_BUILD_TYPE={compile_mode}"
-		        if compile_mode not in IGNORED_COMPILE_TYPE else "", "-DNO_LOGS=OFF"
-		    ],
-		    log=build_log,
-		    file_mode="w"
-		)
+		if compile_mode == "SST":
+			# SST mode: Build and install SST element library
+			# SST elements are built using their own Makefile in src/<src_dirname>
+			sst_src_dir = os.path.join("src", src_dirname)
 
-		# Compile the target using all available CPU cores
-		exec_cmd(
-		    cmd=["cmake", "--build", build_dir, f"-j{os.cpu_count()}", "--target", src_dirname],
-		    log=build_log,
-		    file_mode="a"
-		)
+			# Clean previous build
+			exec_cmd(
+			    cmd=["make", "-C", sst_src_dir, "clean"],
+			    log=build_log,
+			    file_mode="w"
+			)
+
+			# Build SST element library
+			exec_cmd(
+			    cmd=["make", "-C", sst_src_dir, f"-j{os.cpu_count()}"],
+			    log=build_log,
+			    file_mode="a"
+			)
+
+			# Install SST element library
+			exec_cmd(
+			    cmd=["make", "-C", sst_src_dir, "install"],
+			    log=build_log,
+			    file_mode="a"
+			)
+		else:
+			# Standard CMake-based build for Debug/Release/GTest modes
+			# Configure CMake with build type
+			# Note: GTest mode skips CMAKE_BUILD_TYPE flag as it's in IGNORED_COMPILE_TYPE
+			exec_cmd(
+			    cmd=[
+			        "cmake", "-B", build_dir, f"-DCMAKE_BUILD_TYPE={compile_mode}"
+			        if compile_mode not in IGNORED_COMPILE_TYPE else "", "-DNO_LOGS=OFF"
+			    ],
+			    log=build_log,
+			    file_mode="w"
+			)
+
+			# Compile the target using all available CPU cores
+			exec_cmd(
+			    cmd=["cmake", "--build", build_dir, f"-j{os.cpu_count()}", "--target", src_dirname],
+			    log=build_log,
+			    file_mode="a"
+			)
 
 	except Exception as e:
 		# Compilation failed - report and abort (don't attempt execution)
@@ -569,14 +596,32 @@ def exec_proj(
 		# Run the main simulation with validation
 		with open(exec_log, mode="a", encoding="utf-8") as file:
 			file.write("\n======= Simulation =======\n")
-		exec_cmd(
-		    cmd=[os.path.join(build_dir, src_dirname)] + exec_args,
-		    log=exec_log,
-		    file_mode="a",
-		    timeout=timeout,
-		    verify_sim_tick_value=expected_tick_value,
-		    verify_sim_tick_range=expected_tick_range
-		)
+
+		if compile_mode == "SST":
+			# SST mode: Run sst command with Python config file
+			# exec_args[0] should be the path to the Python config file
+			# Execute from src/<src_dirname> directory where the config is located
+			sst_src_dir = os.path.join("src", src_dirname)
+			sst_config = exec_args[0] if exec_args else "examples/riscv_single_core.py"
+
+			exec_cmd(
+			    cmd=["sst", os.path.join(sst_src_dir, sst_config)],
+			    log=exec_log,
+			    file_mode="a",
+			    timeout=timeout,
+			    verify_sim_tick_value=expected_tick_value,
+			    verify_sim_tick_range=expected_tick_range
+			)
+		else:
+			# Standard execution for Debug/Release/GTest modes
+			exec_cmd(
+			    cmd=[os.path.join(build_dir, src_dirname)] + exec_args,
+			    log=exec_log,
+			    file_mode="a",
+			    timeout=timeout,
+			    verify_sim_tick_value=expected_tick_value,
+			    verify_sim_tick_range=expected_tick_range
+			)
 
 		# Run post-execution cleanup/verification commands
 		with open(exec_log, mode="a", encoding="utf-8") as file:

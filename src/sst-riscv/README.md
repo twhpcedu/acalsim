@@ -87,7 +87,7 @@ sst-info
 ### Using Make
 
 ```bash
-cd src/sst-integration
+cd src/sst-riscv
 
 # Build the SST element library
 make
