@@ -21,13 +21,11 @@ limitations under the License.
 #include <sst/core/link.h>
 #include <sst/core/output.h>
 
-#include "ACALSim.hh"
-
 // Forward declarations
 class SOCTop;
 
 namespace ACALSim {
-namespace SST {
+namespace SSTIntegration {
 
 /**
  * @brief Standalone RISC-V SoC SST Component
@@ -41,23 +39,14 @@ namespace SST {
  */
 class RISCVSoCStandalone : public ::SST::Component {
 public:
-	SST_ELI_REGISTER_COMPONENT(RISCVSoCStandalone,
-	                           "acalsim",
-	                           "RISCVSoCStandalone",
-	                           SST_ELI_ELEMENT_VERSION(1, 0, 0),
-	                           "Standalone RISC-V RV32I SoC (includes full SimTop)",
-	                           COMPONENT_CATEGORY_PROCESSOR)
+	SST_ELI_REGISTER_COMPONENT(RISCVSoCStandalone, "acalsim", "RISCVSoCStandalone", SST_ELI_ELEMENT_VERSION(1, 0, 0),
+	                           "Standalone RISC-V RV32I SoC (includes full SimTop)", COMPONENT_CATEGORY_PROCESSOR)
 
-	SST_ELI_DOCUMENT_PARAMS(
-	    {"clock", "Clock frequency", "1GHz"},
-	    {"asm_file", "Path to RISC-V assembly file", ""},
-	    {"config_file", "Path to config JSON (optional)", ""},
-	    {"memory_size", "Memory size in bytes", "65536"},
-	    {"text_offset", "Text segment offset", "0"},
-	    {"data_offset", "Data segment offset", "8192"},
-	    {"max_cycles", "Maximum cycles (0=unlimited)", "0"},
-	    {"verbose", "Verbosity level", "1"}
-	)
+	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"}, {"asm_file", "Path to RISC-V assembly file", ""},
+	                        {"config_file", "Path to config JSON (optional)", ""},
+	                        {"memory_size", "Memory size in bytes", "65536"},
+	                        {"text_offset", "Text segment offset", "0"}, {"data_offset", "Data segment offset", "8192"},
+	                        {"max_cycles", "Maximum cycles (0=unlimited)", "0"}, {"verbose", "Verbosity level", "1"})
 
 	/**
 	 * @brief Constructor
@@ -79,19 +68,20 @@ public:
 	bool clockTick(::SST::Cycle_t cycle);
 
 private:
-	::SST::Output out_;
+	::SST::Output         out_;
 	::SST::TimeConverter* tc_;
 
 	std::shared_ptr<SOCTop> soc_top_;  ///< Complete RISC-V simulator
 
-	uint64_t current_cycle_;
-	uint64_t max_cycles_;
-	bool simulation_done_;
+	uint64_t    current_cycle_;
+	uint64_t    max_cycles_;
+	bool        simulation_done_;
+	bool        ready_to_terminate_;  ///< ExitEvent issued, need one more iteration
 	std::string asm_file_;
 	std::string config_file_;
 };
 
-} // namespace SST
-} // namespace ACALSim
+}  // namespace SSTIntegration
+}  // namespace ACALSim
 
-#endif // __RISCV_SOC_STANDALONE_HH__
+#endif  // __RISCV_SOC_STANDALONE_HH__

@@ -22,8 +22,6 @@ limitations under the License.
 #include <sst/core/output.h>
 #include <sst/core/params.h>
 
-#include "ACALSim.hh"
-
 // Forward declare RISC-V classes to avoid including full headers
 class SOC;
 class IFStage;
@@ -31,7 +29,7 @@ class EXEStage;
 class WBStage;
 
 namespace ACALSim {
-namespace SST {
+namespace SSTIntegration {
 
 /**
  * @brief SST Component wrapper for RISC-V RV32I System-on-Chip
@@ -192,7 +190,7 @@ private:
 	::SST::Link* mem_link_;  ///< External memory link
 };
 
-} // namespace SST
+} // namespace SSTIntegration
 } // namespace ACALSim
 
 #endif // __RISCV_SOC_COMPONENT_HH__

@@ -18,15 +18,15 @@ limitations under the License.
 
 #include <sst/core/sst_config.h>
 
-// Include RISC-V simulator headers
-#include "DEStage.hh"
-#include "EXEStage.hh"
-#include "IFStage.hh"
-#include "MEMStage.hh"
-#include "SOC.hh"
-#include "WBStage.hh"
+// Include RISC-V simulator headers with proper paths
+#include "../../src/riscv/include/DEStage.hh"
+#include "../../src/riscv/include/EXEStage.hh"
+#include "../../src/riscv/include/IFStage.hh"
+#include "../../src/riscv/include/MEMStage.hh"
+#include "../../src/riscv/include/SOC.hh"
+#include "../../src/riscv/include/WBStage.hh"
 
-using namespace ACALSim::SST;
+using namespace ACALSim::SSTIntegration;
 
 RISCVSoCComponent::RISCVSoCComponent(::SST::ComponentId_t id, ::SST::Params& params)
     : ::SST::Component(id),
@@ -83,8 +83,7 @@ RISCVSoCComponent::RISCVSoCComponent(::SST::ComponentId_t id, ::SST::Params& par
 	initRISCVSimulator(params);
 
 	// Register clock handler
-	tc_ = registerClock(clock_freq_, new ::SST::Clock::Handler<RISCVSoCComponent>(
-	                                     this, &RISCVSoCComponent::clockTick));
+	tc_ = registerClock(clock_freq_, new ::SST::Clock::Handler2<RISCVSoCComponent, &RISCVSoCComponent::clockTick>(this));
 
 	// Tell SST we control simulation end
 	registerAsPrimaryComponent();

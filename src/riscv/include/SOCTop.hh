@@ -113,6 +113,30 @@ public:
 		this->sWB->addPRSlavePort("prEXE2WB-out", prEXE2WB);
 	}
 
+	/**
+	 * @brief Public wrappers for SST integration
+	 * @details These methods expose thread manager functionality needed for
+	 *          step-by-step execution within SST's clock-driven framework
+	 */
+	void          startSimThreadsPublic() { this->threadManager->startSimThreads(); }
+	void          startRunning() { this->threadManager->startRunning(); }
+	void          startPhase1() { this->threadManager->startPhase1(); }
+	void          finishPhase1() { this->threadManager->finishPhase1(); }
+	void          startPhase2() { this->threadManager->startPhase2(); }
+	void          finishPhase2() { this->threadManager->finishPhase2(); }
+	void          runInterIterationUpdate() { this->threadManager->runInterIterationUpdate(); }
+	bool          isAllSimulatorDone() const { return this->threadManager->isAllSimulatorDone(); }
+	void          issueExitEvent(acalsim::Tick t) { this->threadManager->issueExitEvent(t); }
+	acalsim::Tick getFastForwardCycles() { return this->threadManager->getFastForwardCycles(); }
+
+	/**
+	 * @brief Configure single-threaded execution for SST integration
+	 * @details Sets nCustomThreads to 0, forcing single-threaded execution.
+	 *          This avoids thread conflicts with SST's single-threaded model.
+	 *          Must be called BEFORE init().
+	 */
+	void setSingleThreadedMode() { this->nCustomThreads = 0; }
+
 private:
 	SOC*      soc;
 	Emulator* isaEmulator;

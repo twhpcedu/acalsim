@@ -47,9 +47,9 @@ CLOCK_FREQ = "1GHz"
 MAX_CYCLES = 100000  # Maximum simulation cycles (0 = unlimited)
 
 # Memory configuration
-MEMORY_SIZE = 65536   # 64KB
-TEXT_OFFSET = 0       # Text segment starts at address 0
-DATA_OFFSET = 8192    # Data segment starts at address 8KB
+MEMORY_SIZE = 65536  # 64KB
+TEXT_OFFSET = 0  # Text segment starts at address 0
+DATA_OFFSET = 8192  # Data segment starts at address 8KB
 
 # Assembly program selection
 # Available programs in src/riscv/asm/:
@@ -58,7 +58,7 @@ DATA_OFFSET = 8192    # Data segment starts at address 8KB
 # - load_store_simple.txt : Memory access test
 # - test.txt           : Basic arithmetic test
 
-ASM_FILE = "../../src/riscv/asm/branch_simple.txt"
+ASM_FILE = "/tmp/simple_test.txt"
 
 # Verbosity (0-5, higher = more detailed)
 VERBOSE = 2
@@ -82,13 +82,13 @@ print("Creating RISC-V RV32I Single-Core System...")
 # Create RISC-V processor component
 riscv_cpu = sst.Component("riscv_cpu", "acalsim.RISCVSoCStandalone")
 riscv_cpu.addParams({
-	"clock": CLOCK_FREQ,
-	"asm_file": ASM_FILE,
-	"memory_size": MEMORY_SIZE,
-	"text_offset": TEXT_OFFSET,
-	"data_offset": DATA_OFFSET,
-	"max_cycles": MAX_CYCLES,
-	"verbose": VERBOSE
+    "clock": CLOCK_FREQ,
+    "asm_file": ASM_FILE,
+    "memory_size": MEMORY_SIZE,
+    "text_offset": TEXT_OFFSET,
+    "data_offset": DATA_OFFSET,
+    "max_cycles": MAX_CYCLES,
+    "verbose": VERBOSE
 })
 
 # ========== Statistics Configuration ==========
