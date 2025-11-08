@@ -546,24 +546,31 @@ def exec_proj(
 			in_docker = os.path.exists("/.dockerenv")
 
 			if in_docker:
-				# Running inside Docker - execute SST commands directly
+				# Running inside Docker - execute SST commands with bash to set environment
+				# SST environment variables
+				sst_env = (
+				    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+				    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+				    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+				)
+
 				# Clean previous build
 				exec_cmd(
-				    cmd=["make", "-C", sst_src_dir, "clean"],
+				    cmd=["bash", "-c", f"cd {sst_src_dir} && {sst_env} && make clean"],
 				    log=build_log,
 				    file_mode="w"
 				)
 
 				# Build SST element library
 				exec_cmd(
-				    cmd=["make", "-C", sst_src_dir, "-j", str(os.cpu_count() or 1)],
+				    cmd=["bash", "-c", f"cd {sst_src_dir} && {sst_env} && make -j$(nproc)"],
 				    log=build_log,
 				    file_mode="a"
 				)
 
 				# Install SST element library
 				exec_cmd(
-				    cmd=["make", "-C", sst_src_dir, "install"],
+				    cmd=["bash", "-c", f"cd {sst_src_dir} && {sst_env} && make install"],
 				    log=build_log,
 				    file_mode="a"
 				)
@@ -658,9 +665,16 @@ def exec_proj(
 			in_docker = os.path.exists("/.dockerenv")
 
 			if in_docker:
-				# Running inside Docker - execute SST directly
+				# Running inside Docker - execute SST with bash to set environment
+				# SST environment variables
+				sst_env = (
+				    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+				    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+				    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+				)
+
 				exec_cmd(
-				    cmd=["sst", os.path.join(sst_src_dir, sst_config)],
+				    cmd=["bash", "-c", f"cd {sst_src_dir} && {sst_env} && sst {sst_config}"],
 				    log=exec_log,
 				    file_mode="a",
 				    timeout=timeout,
