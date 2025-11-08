@@ -113,8 +113,9 @@ IGNORED_COMPILE_TYPE: List[str] = [
 
 # Regular expressions for log parsing
 COLOR_REGEX: re.Pattern = re.compile(r"\033\[[0-9;]+m")  # Matches ANSI color escape codes
+# Matches both native ACALSim and SST completion messages
 TIMETICK_REGEX: re.Pattern = re.compile(
-    r"Tick=(\d+) Info: \[.+\] Simulation complete\."
+    r"(?:Tick=(\d+) Info: \[.+\] Simulation complete\.|All simulators done at tick (\d+))"
 )  # Extracts simulation completion tick
 
 # Global formatting variables (set dynamically by task_analysis())
@@ -305,7 +306,9 @@ def exec_cmd(
 			for line in proc.stdout.splitlines():
 				line = COLOR_REGEX.sub("", line)  # Remove ANSI color codes
 				m = re.search(TIMETICK_REGEX, line)
-				sim_complete_tick = int(m.group(1)) if m else sim_complete_tick
+				# Extract tick from whichever group matched (group 1 for native, group 2 for SST)
+				if m:
+					sim_complete_tick = int(m.group(1) if m.group(1) else m.group(2))
 				f_log.write(f"{line}\n")
 
 		# Validation phase: Check if simulation completed when validation is requested
@@ -535,27 +538,48 @@ def exec_proj(
 		subprocess.run(["mkdir", "-p", log_dir], check=True)
 
 		if compile_mode == "SST":
-			# SST mode: Build and install SST element library
+			# SST mode: Build and install SST element library in Docker
 			# SST elements are built using their own Makefile in src/<src_dirname>
 			sst_src_dir = os.path.join("src", src_dirname)
 
+			# Docker container name and paths
+			docker_container = "acalsim-workspace"
+			docker_project_dir = "/home/user/projects/acalsim"
+			docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
+
+			# SST environment variables
+			sst_env = (
+			    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+			    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+			    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+			)
+
 			# Clean previous build
 			exec_cmd(
-			    cmd=["make", "-C", sst_src_dir, "clean"],
+			    cmd=[
+			        "docker", "exec", docker_container, "bash", "-c",
+			        f"cd {docker_sst_dir} && {sst_env} && make clean"
+			    ],
 			    log=build_log,
 			    file_mode="w"
 			)
 
 			# Build SST element library
 			exec_cmd(
-			    cmd=["make", "-C", sst_src_dir, f"-j{os.cpu_count()}"],
+			    cmd=[
+			        "docker", "exec", docker_container, "bash", "-c",
+			        f"cd {docker_sst_dir} && {sst_env} && make -j$(nproc)"
+			    ],
 			    log=build_log,
 			    file_mode="a"
 			)
 
 			# Install SST element library
 			exec_cmd(
-			    cmd=["make", "-C", sst_src_dir, "install"],
+			    cmd=[
+			        "docker", "exec", docker_container, "bash", "-c",
+			        f"cd {docker_sst_dir} && {sst_env} && make install"
+			    ],
 			    log=build_log,
 			    file_mode="a"
 			)
@@ -598,14 +622,29 @@ def exec_proj(
 			file.write("\n======= Simulation =======\n")
 
 		if compile_mode == "SST":
-			# SST mode: Run sst command with Python config file
+			# SST mode: Run sst command with Python config file in Docker
 			# exec_args[0] should be the path to the Python config file
 			# Execute from src/<src_dirname> directory where the config is located
 			sst_src_dir = os.path.join("src", src_dirname)
 			sst_config = exec_args[0] if exec_args else "examples/riscv_single_core.py"
 
+			# Docker container name and paths
+			docker_container = "acalsim-workspace"
+			docker_project_dir = "/home/user/projects/acalsim"
+			docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
+
+			# SST environment variables
+			sst_env = (
+			    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+			    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+			    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+			)
+
 			exec_cmd(
-			    cmd=["sst", os.path.join(sst_src_dir, sst_config)],
+			    cmd=[
+			        "docker", "exec", docker_container, "bash", "-c",
+			        f"cd {docker_sst_dir} && {sst_env} && sst {sst_config}"
+			    ],
 			    log=exec_log,
 			    file_mode="a",
 			    timeout=timeout,

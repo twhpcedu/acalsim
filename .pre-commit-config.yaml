@@ -40,6 +40,6 @@ repos:
   hooks:
   - id: license-header-check
     name: check the license header of all files
-    entry: bash -c 'python scripts/license-update.py'
+    entry: bash -c 'python3 scripts/license-update.py'
     language: system
     pass_filenames: false
