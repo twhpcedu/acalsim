@@ -538,51 +538,78 @@ def exec_proj(
 		subprocess.run(["mkdir", "-p", log_dir], check=True)
 
 		if compile_mode == "SST":
-			# SST mode: Build and install SST element library in Docker
+			# SST mode: Build and install SST element library
 			# SST elements are built using their own Makefile in src/<src_dirname>
 			sst_src_dir = os.path.join("src", src_dirname)
 
-			# Docker container name and paths
-			docker_container = "acalsim-workspace"
-			docker_project_dir = "/home/user/projects/acalsim"
-			docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
+			# Detect if running inside Docker container
+			in_docker = os.path.exists("/.dockerenv")
 
-			# SST environment variables
-			sst_env = (
-			    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
-			    "export PATH=$SST_CORE_HOME/bin:$PATH && "
-			    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
-			)
+			if in_docker:
+				# Running inside Docker - execute SST commands directly
+				# Clean previous build
+				exec_cmd(
+				    cmd=["make", "-C", sst_src_dir, "clean"],
+				    log=build_log,
+				    file_mode="w"
+				)
 
-			# Clean previous build
-			exec_cmd(
-			    cmd=[
-			        "docker", "exec", docker_container, "bash", "-c",
-			        f"cd {docker_sst_dir} && {sst_env} && make clean"
-			    ],
-			    log=build_log,
-			    file_mode="w"
-			)
+				# Build SST element library
+				exec_cmd(
+				    cmd=["make", "-C", sst_src_dir, "-j", str(os.cpu_count() or 1)],
+				    log=build_log,
+				    file_mode="a"
+				)
 
-			# Build SST element library
-			exec_cmd(
-			    cmd=[
-			        "docker", "exec", docker_container, "bash", "-c",
-			        f"cd {docker_sst_dir} && {sst_env} && make -j$(nproc)"
-			    ],
-			    log=build_log,
-			    file_mode="a"
-			)
+				# Install SST element library
+				exec_cmd(
+				    cmd=["make", "-C", sst_src_dir, "install"],
+				    log=build_log,
+				    file_mode="a"
+				)
+			else:
+				# Running on host - use docker exec to run commands in container
+				docker_cmd = "/usr/local/bin/docker"
+				docker_container = "acalsim-workspace"
+				docker_project_dir = "/home/user/projects/acalsim"
+				docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
 
-			# Install SST element library
-			exec_cmd(
-			    cmd=[
-			        "docker", "exec", docker_container, "bash", "-c",
-			        f"cd {docker_sst_dir} && {sst_env} && make install"
-			    ],
-			    log=build_log,
-			    file_mode="a"
-			)
+				# SST environment variables
+				sst_env = (
+				    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+				    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+				    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+				)
+
+				# Clean previous build
+				exec_cmd(
+				    cmd=[
+				        docker_cmd, "exec", docker_container, "bash", "-c",
+				        f"cd {docker_sst_dir} && {sst_env} && make clean"
+				    ],
+				    log=build_log,
+				    file_mode="w"
+				)
+
+				# Build SST element library
+				exec_cmd(
+				    cmd=[
+				        docker_cmd, "exec", docker_container, "bash", "-c",
+				        f"cd {docker_sst_dir} && {sst_env} && make -j$(nproc)"
+				    ],
+				    log=build_log,
+				    file_mode="a"
+				)
+
+				# Install SST element library
+				exec_cmd(
+				    cmd=[
+				        docker_cmd, "exec", docker_container, "bash", "-c",
+				        f"cd {docker_sst_dir} && {sst_env} && make install"
+				    ],
+				    log=build_log,
+				    file_mode="a"
+				)
 		else:
 			# Standard CMake-based build for Debug/Release/GTest modes
 			# Configure CMake with build type
@@ -622,35 +649,49 @@ def exec_proj(
 			file.write("\n======= Simulation =======\n")
 
 		if compile_mode == "SST":
-			# SST mode: Run sst command with Python config file in Docker
+			# SST mode: Run sst command with Python config file
 			# exec_args[0] should be the path to the Python config file
-			# Execute from src/<src_dirname> directory where the config is located
 			sst_src_dir = os.path.join("src", src_dirname)
 			sst_config = exec_args[0] if exec_args else "examples/riscv_single_core.py"
 
-			# Docker container name and paths
-			docker_container = "acalsim-workspace"
-			docker_project_dir = "/home/user/projects/acalsim"
-			docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
+			# Detect if running inside Docker container
+			in_docker = os.path.exists("/.dockerenv")
 
-			# SST environment variables
-			sst_env = (
-			    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
-			    "export PATH=$SST_CORE_HOME/bin:$PATH && "
-			    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
-			)
+			if in_docker:
+				# Running inside Docker - execute SST directly
+				exec_cmd(
+				    cmd=["sst", os.path.join(sst_src_dir, sst_config)],
+				    log=exec_log,
+				    file_mode="a",
+				    timeout=timeout,
+				    verify_sim_tick_value=expected_tick_value,
+				    verify_sim_tick_range=expected_tick_range
+				)
+			else:
+				# Running on host - use docker exec to run sst in container
+				docker_cmd = "/usr/local/bin/docker"
+				docker_container = "acalsim-workspace"
+				docker_project_dir = "/home/user/projects/acalsim"
+				docker_sst_dir = f"{docker_project_dir}/{sst_src_dir}"
 
-			exec_cmd(
-			    cmd=[
-			        "docker", "exec", docker_container, "bash", "-c",
-			        f"cd {docker_sst_dir} && {sst_env} && sst {sst_config}"
-			    ],
-			    log=exec_log,
-			    file_mode="a",
-			    timeout=timeout,
-			    verify_sim_tick_value=expected_tick_value,
-			    verify_sim_tick_range=expected_tick_range
-			)
+				# SST environment variables
+				sst_env = (
+				    "export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install && "
+				    "export PATH=$SST_CORE_HOME/bin:$PATH && "
+				    "export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH"
+				)
+
+				exec_cmd(
+				    cmd=[
+				        docker_cmd, "exec", docker_container, "bash", "-c",
+				        f"cd {docker_sst_dir} && {sst_env} && sst {sst_config}"
+				    ],
+				    log=exec_log,
+				    file_mode="a",
+				    timeout=timeout,
+				    verify_sim_tick_value=expected_tick_value,
+				    verify_sim_tick_range=expected_tick_range
+				)
 		else:
 			# Standard execution for Debug/Release/GTest modes
 			exec_cmd(
