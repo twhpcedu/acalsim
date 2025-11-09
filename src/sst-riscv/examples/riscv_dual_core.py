@@ -46,8 +46,8 @@ DATA_OFFSET = 8192
 
 # Assembly programs for each core
 ASM_FILES = [
-	"../../src/riscv/asm/branch_simple.txt",  # Core 0
-	"../../src/riscv/asm/load_store_simple.txt"  # Core 1
+    "../../src/riscv/asm/branch_simple.txt",  # Core 0
+    "../../src/riscv/asm/load_store_simple.txt"  # Core 1
 ]
 
 VERBOSE = 1
@@ -72,13 +72,13 @@ for i in range(NUM_CORES):
 
 	cpu = sst.Component(core_name, "acalsim.RISCVSoCStandalone")
 	cpu.addParams({
-		"clock": CLOCK_FREQ,
-		"asm_file": ASM_FILES[i],
-		"memory_size": MEMORY_SIZE,
-		"text_offset": TEXT_OFFSET,
-		"data_offset": DATA_OFFSET,
-		"max_cycles": MAX_CYCLES,
-		"verbose": VERBOSE
+	    "clock": CLOCK_FREQ,
+	    "asm_file": ASM_FILES[i],
+	    "memory_size": MEMORY_SIZE,
+	    "text_offset": TEXT_OFFSET,
+	    "data_offset": DATA_OFFSET,
+	    "max_cycles": MAX_CYCLES,
+	    "verbose": VERBOSE
 	})
 
 	cores.append(cpu)
@@ -88,10 +88,12 @@ for i in range(NUM_CORES):
 print("Configuring statistics...")
 
 sst.setStatisticLoadLevel(7)
-sst.setStatisticOutput("sst.statOutputCSV", {
-	"filepath": "riscv_dual_core_stats.csv",
-	"separator": ","
-})
+sst.setStatisticOutput(
+    "sst.statOutputCSV", {
+        "filepath": "riscv_dual_core_stats.csv",
+        "separator": ","
+    }
+)
 
 # Enable statistics for each core
 # for i, cpu in enumerate(cores):

@@ -1,18 +1,18 @@
 /*
-Copyright 2023-2025 Playlab/ACAL
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * Copyright 2023-2025 Playlab/ACAL
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "RISCVSoCComponent.hh"
 
@@ -29,11 +29,7 @@ limitations under the License.
 using namespace ACALSim::SSTIntegration;
 
 RISCVSoCComponent::RISCVSoCComponent(::SST::ComponentId_t id, ::SST::Params& params)
-    : ::SST::Component(id),
-      current_cycle_(0),
-      max_cycles_(0),
-      simulation_done_(false),
-      mem_link_(nullptr) {
+    : ::SST::Component(id), current_cycle_(0), max_cycles_(0), simulation_done_(false), mem_link_(nullptr) {
 	// Initialize output
 	int verbose = params.find<int>("verbose", 1);
 	out_.init("RISCVSoCComponent[@p:@l]: ", verbose, 0, ::SST::Output::STDOUT);
@@ -46,44 +42,39 @@ RISCVSoCComponent::RISCVSoCComponent(::SST::ComponentId_t id, ::SST::Params& par
 
 	// Get simulation parameters
 	max_cycles_ = params.find<uint64_t>("max_cycles", 0);
-	if (max_cycles_ > 0) {
-		out_.verbose(CALL_INFO, 2, 0, "Max cycles: %lu\n", max_cycles_);
-	}
+	if (max_cycles_ > 0) { out_.verbose(CALL_INFO, 2, 0, "Max cycles: %lu\n", max_cycles_); }
 
 	// Get RISC-V specific parameters
-	asm_file_path_ = params.find<std::string>("asm_file", "");
-	memory_size_ = params.find<uint32_t>("memory_size", 65536);
-	text_offset_ = params.find<uint32_t>("text_offset", 0);
-	data_offset_ = params.find<uint32_t>("data_offset", 8192);
+	asm_file_path_  = params.find<std::string>("asm_file", "");
+	memory_size_    = params.find<uint32_t>("memory_size", 65536);
+	text_offset_    = params.find<uint32_t>("text_offset", 0);
+	data_offset_    = params.find<uint32_t>("data_offset", 8192);
 	dump_registers_ = params.find<bool>("dump_registers", true);
-	dump_memory_ = params.find<bool>("dump_memory", false);
+	dump_memory_    = params.find<bool>("dump_memory", false);
 
-	if (asm_file_path_.empty()) {
-		out_.fatal(CALL_INFO, -1, "Error: asm_file parameter is required\n");
-	}
+	if (asm_file_path_.empty()) { out_.fatal(CALL_INFO, -1, "Error: asm_file parameter is required\n"); }
 
 	out_.verbose(CALL_INFO, 2, 0, "Assembly file: %s\n", asm_file_path_.c_str());
 	out_.verbose(CALL_INFO, 2, 0, "Memory size: %u bytes\n", memory_size_);
 
 	// Register statistics
-	stat_instructions_ = registerStatistic<uint64_t>("instructions_executed");
-	stat_cycles_ = registerStatistic<uint64_t>("cycles");
-	stat_branches_ = registerStatistic<uint64_t>("branches_taken");
-	stat_loads_ = registerStatistic<uint64_t>("loads");
-	stat_stores_ = registerStatistic<uint64_t>("stores");
+	stat_instructions_    = registerStatistic<uint64_t>("instructions_executed");
+	stat_cycles_          = registerStatistic<uint64_t>("cycles");
+	stat_branches_        = registerStatistic<uint64_t>("branches_taken");
+	stat_loads_           = registerStatistic<uint64_t>("loads");
+	stat_stores_          = registerStatistic<uint64_t>("stores");
 	stat_pipeline_stalls_ = registerStatistic<uint64_t>("pipeline_stalls");
 
 	// Configure optional memory link
 	mem_link_ = configureLink("mem_port");
-	if (mem_link_) {
-		out_.verbose(CALL_INFO, 2, 0, "External memory port configured\n");
-	}
+	if (mem_link_) { out_.verbose(CALL_INFO, 2, 0, "External memory port configured\n"); }
 
 	// Initialize RISC-V simulator
 	initRISCVSimulator(params);
 
 	// Register clock handler
-	tc_ = registerClock(clock_freq_, new ::SST::Clock::Handler2<RISCVSoCComponent, &RISCVSoCComponent::clockTick>(this));
+	tc_ =
+	    registerClock(clock_freq_, new ::SST::Clock::Handler2<RISCVSoCComponent, &RISCVSoCComponent::clockTick>(this));
 
 	// Tell SST we control simulation end
 	registerAsPrimaryComponent();
@@ -92,9 +83,7 @@ RISCVSoCComponent::RISCVSoCComponent(::SST::ComponentId_t id, ::SST::Params& par
 	out_.verbose(CALL_INFO, 1, 0, "RISC-V SoC initialization complete\n");
 }
 
-RISCVSoCComponent::~RISCVSoCComponent() {
-	out_.verbose(CALL_INFO, 1, 0, "Destroying RISCVSoCComponent\n");
-}
+RISCVSoCComponent::~RISCVSoCComponent() { out_.verbose(CALL_INFO, 1, 0, "Destroying RISCVSoCComponent\n"); }
 
 void RISCVSoCComponent::initRISCVSimulator(::SST::Params& params) {
 	out_.verbose(CALL_INFO, 2, 0, "Initializing RISC-V simulator components\n");
@@ -134,9 +123,7 @@ void RISCVSoCComponent::loadAssemblyProgram(const std::string& asm_file) {
 
 	// Verify file exists
 	FILE* fp = fopen(asm_file.c_str(), "r");
-	if (!fp) {
-		out_.fatal(CALL_INFO, -1, "Error: Cannot open assembly file: %s\n", asm_file.c_str());
-	}
+	if (!fp) { out_.fatal(CALL_INFO, -1, "Error: Cannot open assembly file: %s\n", asm_file.c_str()); }
 	fclose(fp);
 
 	// In production implementation:
@@ -173,14 +160,10 @@ void RISCVSoCComponent::finish() {
 	}
 
 	// Dump register file if requested
-	if (dump_registers_) {
-		dumpRegisterFile();
-	}
+	if (dump_registers_) { dumpRegisterFile(); }
 
 	// Dump memory if requested
-	if (dump_memory_) {
-		dumpMemory();
-	}
+	if (dump_memory_) { dumpMemory(); }
 
 	// Print statistics
 	out_.output(CALL_INFO, "\n=== RISC-V SoC Statistics ===\n");
@@ -235,9 +218,7 @@ bool RISCVSoCComponent::shouldEndSimulation() {
 	}
 
 	// End if simulation complete (HCF instruction or no more events)
-	if (simulation_done_) {
-		return true;
-	}
+	if (simulation_done_) { return true; }
 
 	// In production: check if CPU executed HCF instruction
 	// if (soc_ && soc_->isDone()) {

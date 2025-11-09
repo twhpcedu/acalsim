@@ -1,18 +1,18 @@
 /*
-Copyright 2023-2025 Playlab/ACAL
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * Copyright 2023-2025 Playlab/ACAL
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __RISCV_SOC_COMPONENT_HH__
 #define __RISCV_SOC_COMPONENT_HH__
@@ -160,37 +160,37 @@ private:
 	std::string           clock_freq_;  ///< Clock frequency
 
 	// RISC-V simulator components
-	std::unique_ptr<SOC>      soc_;       ///< System-on-Chip
-	std::unique_ptr<IFStage>  if_stage_;  ///< Instruction Fetch stage
-	std::unique_ptr<EXEStage> exe_stage_; ///< Execute stage
-	std::unique_ptr<WBStage>  wb_stage_;  ///< Write-Back stage
+	std::unique_ptr<SOC>      soc_;        ///< System-on-Chip
+	std::unique_ptr<IFStage>  if_stage_;   ///< Instruction Fetch stage
+	std::unique_ptr<EXEStage> exe_stage_;  ///< Execute stage
+	std::unique_ptr<WBStage>  wb_stage_;   ///< Write-Back stage
 
 	// Simulation state
-	uint64_t current_cycle_;  ///< Current simulation cycle
-	uint64_t max_cycles_;     ///< Maximum cycles (0 = unlimited)
-	bool     simulation_done_;   ///< Simulation complete flag
+	uint64_t current_cycle_;    ///< Current simulation cycle
+	uint64_t max_cycles_;       ///< Maximum cycles (0 = unlimited)
+	bool     simulation_done_;  ///< Simulation complete flag
 
 	// Configuration
-	std::string asm_file_path_;  ///< Assembly file path
-	uint32_t    memory_size_;    ///< Memory size
-	uint32_t    text_offset_;    ///< Text segment offset
-	uint32_t    data_offset_;    ///< Data segment offset
-	bool        dump_registers_; ///< Dump registers on finish
-	bool        dump_memory_;    ///< Dump memory on finish
+	std::string asm_file_path_;   ///< Assembly file path
+	uint32_t    memory_size_;     ///< Memory size
+	uint32_t    text_offset_;     ///< Text segment offset
+	uint32_t    data_offset_;     ///< Data segment offset
+	bool        dump_registers_;  ///< Dump registers on finish
+	bool        dump_memory_;     ///< Dump memory on finish
 
 	// Statistics (SST will manage these)
-	::SST::Statistic<uint64_t>* stat_instructions_;   ///< Instructions executed
-	::SST::Statistic<uint64_t>* stat_cycles_;         ///< Cycles
-	::SST::Statistic<uint64_t>* stat_branches_;       ///< Branches taken
-	::SST::Statistic<uint64_t>* stat_loads_;          ///< Load instructions
-	::SST::Statistic<uint64_t>* stat_stores_;         ///< Store instructions
-	::SST::Statistic<uint64_t>* stat_pipeline_stalls_;///< Pipeline stalls
+	::SST::Statistic<uint64_t>* stat_instructions_;     ///< Instructions executed
+	::SST::Statistic<uint64_t>* stat_cycles_;           ///< Cycles
+	::SST::Statistic<uint64_t>* stat_branches_;         ///< Branches taken
+	::SST::Statistic<uint64_t>* stat_loads_;            ///< Load instructions
+	::SST::Statistic<uint64_t>* stat_stores_;           ///< Store instructions
+	::SST::Statistic<uint64_t>* stat_pipeline_stalls_;  ///< Pipeline stalls
 
 	// External links (optional)
 	::SST::Link* mem_link_;  ///< External memory link
 };
 
-} // namespace SSTIntegration
-} // namespace ACALSim
+}  // namespace SSTIntegration
+}  // namespace ACALSim
 
-#endif // __RISCV_SOC_COMPONENT_HH__
+#endif  // __RISCV_SOC_COMPONENT_HH__

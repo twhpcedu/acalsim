@@ -1,18 +1,18 @@
 /*
-Copyright 2023-2025 Playlab/ACAL
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * Copyright 2023-2025 Playlab/ACAL
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef __ACALSIM_SST_COMPONENT_HH__
 #define __ACALSIM_SST_COMPONENT_HH__
@@ -25,7 +25,6 @@ limitations under the License.
 
 // Minimal ACALSim includes (avoids PyTorch and heavy dependencies)
 #include "ACALSim_Minimal.hh"
-
 
 namespace ACALSim {
 namespace SSTIntegration {
@@ -202,9 +201,9 @@ private:
 	// ACALSim simulator state
 	// Note: Actual simulator instance should be created in derived classes
 	// std::unique_ptr<SimBase> simulator_;  // Users create their own in derived classes
-	std::string              config_name_;   ///< Simulator configuration name
-	Tick                     current_tick_;  ///< Current simulation tick
-	Tick                     max_ticks_;     ///< Maximum ticks (0 = unlimited)
+	std::string config_name_;   ///< Simulator configuration name
+	Tick        current_tick_;  ///< Current simulation tick
+	Tick        max_ticks_;     ///< Maximum ticks (0 = unlimited)
 
 	// Port/Link mapping
 	std::map<int, ::SST::Link*> links_;       ///< Map of port ID -> SST Link
