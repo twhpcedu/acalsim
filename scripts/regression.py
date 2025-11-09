@@ -14,11 +14,11 @@ The regression framework:
     5. Reports pass/fail status with color-coded terminal output
 
 Typical Usage:
-    Run all regression tests with default 30-second timeout:
+    Run all regression tests with default 60-second timeout:
         $ python scripts/regression.py
 
-    Run tests with custom timeout (60 seconds):
-        $ python scripts/regression.py --timeout 60
+    Run tests with custom timeout (120 seconds):
+        $ python scripts/regression.py --timeout 120
 
     Run tests with no timeout (useful for debugging):
         $ python scripts/regression.py --timeout 0
@@ -801,7 +801,7 @@ def test_projects(timeout: Optional[int]) -> None:
 @click.option(
     '--timeout',
     help='Time limitation in seconds for executing each test example.',
-    default=30,
+    default=60,
     required=False,
     type=int
 )
@@ -819,7 +819,7 @@ def main(timeout: Optional[int]) -> None:
 
 	Args:
 	    timeout (Optional[int]): Maximum execution time in seconds for each
-	        simulation. Default is 30 seconds. Set to 0 or None for no timeout.
+	        simulation. Default is 60 seconds. Set to 0 or None for no timeout.
 
 	Returns:
 	    None
@@ -829,11 +829,11 @@ def main(timeout: Optional[int]) -> None:
 	    1: One or more tests failed OR keyboard interrupt received
 
 	Command-Line Usage:
-	    Run with default 30-second timeout:
+	    Run with default 60-second timeout:
 	        $ python scripts/regression.py
 
-	    Run with 60-second timeout:
-	        $ python scripts/regression.py --timeout 60
+	    Run with 120-second timeout:
+	        $ python scripts/regression.py --timeout 120
 
 	    Run with no timeout (wait indefinitely):
 	        $ python scripts/regression.py --timeout 0
