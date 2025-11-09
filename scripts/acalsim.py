@@ -716,7 +716,7 @@ PROJ_ARR.append({
     "compile-mode": "Debug",
     "pre-steps": [],
     "post-steps": [],
-    "total-tick": 28  # Branch instructions test
+    "total-tick": 27  # Branch instructions test
 })
 
 # ------------------------------------------------------------------------------
