@@ -203,8 +203,14 @@ bool QEMUBinaryComponent::clockTick(SST::Cycle_t cycle) {
         monitorQEMU();
 
         // Check for incoming MMIO requests from QEMU
-        if (socket_ready_ && client_fd_ >= 0) {
-            handleMMIORequest();
+        if (use_multi_device_) {
+            // N-device mode: poll all device sockets
+            pollDeviceSockets();
+        } else {
+            // Legacy single-device mode
+            if (socket_ready_ && client_fd_ >= 0) {
+                handleMMIORequest();
+            }
         }
     }
 
@@ -269,34 +275,41 @@ void QEMUBinaryComponent::launchQEMU() {
     out_.verbose(CALL_INFO, 1, 0, "Launching QEMU process...\n");
     setState(QEMUState::LAUNCHING);
 
-    // Remove existing socket
-    unlink(socket_path_.c_str());
+    if (use_multi_device_) {
+        // N-device mode: Create N socket servers
+        out_.verbose(CALL_INFO, 1, 0, "Setting up %zu device sockets...\n", devices_.size());
+        for (size_t i = 0; i < devices_.size(); i++) {
+            setupDeviceSocket(&devices_[i], i);
+        }
+    } else {
+        // Legacy single-device mode
+        unlink(socket_path_.c_str());
 
-    // Setup server socket FIRST (before forking)
-    // Create server socket
-    server_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (server_fd_ < 0) {
-        out_.fatal(CALL_INFO, -1, "Error: Failed to create server socket\n");
+        // Setup server socket
+        server_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (server_fd_ < 0) {
+            out_.fatal(CALL_INFO, -1, "Error: Failed to create server socket\n");
+        }
+
+        // Bind to socket path
+        struct sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
+
+        if (bind(server_fd_, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            close(server_fd_);
+            out_.fatal(CALL_INFO, -1, "Error: Failed to bind server socket: %s\n", strerror(errno));
+        }
+
+        // Listen for connections
+        if (listen(server_fd_, 1) < 0) {
+            close(server_fd_);
+            out_.fatal(CALL_INFO, -1, "Error: Failed to listen on socket: %s\n", strerror(errno));
+        }
+
+        out_.verbose(CALL_INFO, 1, 0, "Server socket listening at %s\n", socket_path_.c_str());
     }
-
-    // Bind to socket path
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
-
-    if (bind(server_fd_, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        close(server_fd_);
-        out_.fatal(CALL_INFO, -1, "Error: Failed to bind server socket: %s\n", strerror(errno));
-    }
-
-    // Listen for connections
-    if (listen(server_fd_, 1) < 0) {
-        close(server_fd_);
-        out_.fatal(CALL_INFO, -1, "Error: Failed to listen on socket: %s\n", strerror(errno));
-    }
-
-    out_.verbose(CALL_INFO, 1, 0, "Server socket listening at %s\n", socket_path_.c_str());
 
     // Fork QEMU process
     qemu_pid_ = fork();
@@ -308,8 +321,14 @@ void QEMUBinaryComponent::launchQEMU() {
 
     if (qemu_pid_ == 0) {
         // Child process - exec QEMU as client
-        // Close server socket in child
-        close(server_fd_);
+        // Close server sockets in child
+        if (use_multi_device_) {
+            for (auto& dev : devices_) {
+                close(dev.server_fd);
+            }
+        } else {
+            close(server_fd_);
+        }
 
         // Build QEMU command line arguments dynamically
         std::vector<const char*> args;
@@ -322,15 +341,14 @@ void QEMUBinaryComponent::launchQEMU() {
         args.push_back("-kernel");
         args.push_back(binary_path_.c_str());
 
-        // Add SST devices if in multi-device mode
+        // Add SST devices
         std::vector<std::string> device_args;
         if (use_multi_device_) {
+            // N-device mode: use per-device socket paths
             for (size_t i = 0; i < devices_.size(); i++) {
-                // For now, all devices connect to same socket (single connection)
-                // Future: implement N socket servers for true N-device support
                 char addr_buf[32];
                 snprintf(addr_buf, sizeof(addr_buf), "0x%lx", devices_[i].base_addr);
-                std::string dev_arg = "sst-device,socket=" + socket_path_ +
+                std::string dev_arg = "sst-device,socket=" + devices_[i].socket_path +
                                      ",base_address=" + std::string(addr_buf);
                 device_args.push_back(dev_arg);
                 args.push_back("-device");
@@ -359,48 +377,56 @@ void QEMUBinaryComponent::launchQEMU() {
         exit(1);
     }
 
-    // Parent process - accept connection from QEMU
+    // Parent process
     out_.verbose(CALL_INFO, 1, 0, "QEMU PID: %d\n", qemu_pid_);
-    out_.verbose(CALL_INFO, 1, 0, "Waiting for QEMU to connect...\n");
 
-    // Set socket to non-blocking for accept with timeout
-    int flags = fcntl(server_fd_, F_GETFL, 0);
-    fcntl(server_fd_, F_SETFL, flags | O_NONBLOCK);
+    if (use_multi_device_) {
+        // N-device mode: Connections accepted asynchronously in clockTick()
+        out_.verbose(CALL_INFO, 1, 0, "Waiting for %zu device connections (async)...\n", devices_.size());
+        setState(QEMUState::RUNNING);
+    } else {
+        // Legacy single-device mode: Accept connection synchronously
+        out_.verbose(CALL_INFO, 1, 0, "Waiting for QEMU to connect...\n");
 
-    // Wait for QEMU to connect (with timeout)
-    for (int i = 0; i < 50; i++) {
-        client_fd_ = accept(server_fd_, NULL, NULL);
-        if (client_fd_ >= 0) {
-            // Connection accepted!
-            close(server_fd_);
-            server_fd_ = -1;
+        // Set socket to non-blocking for accept with timeout
+        int flags = fcntl(server_fd_, F_GETFL, 0);
+        fcntl(server_fd_, F_SETFL, flags | O_NONBLOCK);
 
-            // Set client socket to non-blocking
-            flags = fcntl(client_fd_, F_GETFL, 0);
-            fcntl(client_fd_, F_SETFL, flags | O_NONBLOCK);
+        // Wait for QEMU to connect (with timeout)
+        for (int i = 0; i < 50; i++) {
+            client_fd_ = accept(server_fd_, NULL, NULL);
+            if (client_fd_ >= 0) {
+                // Connection accepted!
+                close(server_fd_);
+                server_fd_ = -1;
 
-            socket_ready_ = true;
-            out_.verbose(CALL_INFO, 1, 0, "QEMU connected to MMIO socket\n");
-            setState(QEMUState::RUNNING);
-            return;
+                // Set client socket to non-blocking
+                flags = fcntl(client_fd_, F_GETFL, 0);
+                fcntl(client_fd_, F_SETFL, flags | O_NONBLOCK);
+
+                socket_ready_ = true;
+                out_.verbose(CALL_INFO, 1, 0, "QEMU connected to MMIO socket\n");
+                setState(QEMUState::RUNNING);
+                return;
+            }
+
+            // Check if error is EAGAIN/EWOULDBLOCK (no connection yet)
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                close(server_fd_);
+                out_.fatal(CALL_INFO, -1, "Error: accept() failed: %s\n", strerror(errno));
+            }
+
+            // Wait and retry
+            out_.verbose(CALL_INFO, 3, 0, "Waiting for QEMU connection (attempt %d/50)...\n", i + 1);
+            usleep(200000);  // 200ms
         }
 
-        // Check if error is EAGAIN/EWOULDBLOCK (no connection yet)
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            close(server_fd_);
-            out_.fatal(CALL_INFO, -1, "Error: accept() failed: %s\n", strerror(errno));
-        }
-
-        // Wait and retry
-        out_.verbose(CALL_INFO, 3, 0, "Waiting for QEMU connection (attempt %d/50)...\n", i + 1);
-        usleep(200000);  // 200ms
+        // For Phase 2C initial implementation, we'll continue even without connection
+        // This allows us to test the component without the QEMU device ready yet
+        out_.verbose(CALL_INFO, 1, 0, "Warning: QEMU device connection not established (device not implemented yet)\n");
+        out_.verbose(CALL_INFO, 1, 0, "Phase 2C.1: Component framework ready, QEMU device implementation needed\n");
+        setState(QEMUState::RUNNING);
     }
-
-    // For Phase 2C initial implementation, we'll continue even without connection
-    // This allows us to test the component without the QEMU device ready yet
-    out_.verbose(CALL_INFO, 1, 0, "Warning: QEMU device connection not established (device not implemented yet)\n");
-    out_.verbose(CALL_INFO, 1, 0, "Phase 2C.1: Component framework ready, QEMU device implementation needed\n");
-    setState(QEMUState::RUNNING);
 }
 
 void QEMUBinaryComponent::setupSocket() {
@@ -615,6 +641,149 @@ bool QEMUBinaryComponent::isQEMURunning() {
     int status;
     pid_t result = waitpid(qemu_pid_, &status, WNOHANG);
     return result == 0;  // 0 means process is still running
+}
+
+// =============================================================================
+// N-Socket Server Implementation
+// =============================================================================
+
+void QEMUBinaryComponent::setupDeviceSocket(DeviceInfo* device, int index) {
+    // Generate unique socket path
+    device->socket_path = "/tmp/qemu-sst-device" + std::to_string(index) + ".sock";
+
+    // Remove existing socket file
+    unlink(device->socket_path.c_str());
+
+    // Create server socket
+    device->server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (device->server_fd < 0) {
+        out_.fatal(CALL_INFO, -1, "Error: Failed to create socket for device %s\n",
+                   device->name.c_str());
+    }
+
+    // Bind socket
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, device->socket_path.c_str(), sizeof(addr.sun_path) - 1);
+
+    if (bind(device->server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(device->server_fd);
+        out_.fatal(CALL_INFO, -1, "Error: Failed to bind socket %s: %s\n",
+                   device->socket_path.c_str(), strerror(errno));
+    }
+
+    // Listen
+    if (listen(device->server_fd, 1) < 0) {
+        close(device->server_fd);
+        out_.fatal(CALL_INFO, -1, "Error: Failed to listen on %s: %s\n",
+                   device->socket_path.c_str(), strerror(errno));
+    }
+
+    // Set non-blocking
+    int flags = fcntl(device->server_fd, F_GETFL, 0);
+    fcntl(device->server_fd, F_SETFL, flags | O_NONBLOCK);
+
+    out_.verbose(CALL_INFO, 2, 0, "Device %s socket listening at %s\n",
+                 device->name.c_str(), device->socket_path.c_str());
+}
+
+void QEMUBinaryComponent::acceptDeviceConnection(DeviceInfo* device) {
+    if (device->socket_ready || device->server_fd < 0) {
+        return;  // Already connected or no server
+    }
+
+    struct sockaddr_un client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    device->client_fd = accept(device->server_fd, (struct sockaddr*)&client_addr, &client_len);
+
+    if (device->client_fd < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            out_.verbose(CALL_INFO, 1, 0, "Error accepting connection for %s: %s\n",
+                         device->name.c_str(), strerror(errno));
+        }
+        return;
+    }
+
+    // Set client socket non-blocking
+    int flags = fcntl(device->client_fd, F_GETFL, 0);
+    fcntl(device->client_fd, F_SETFL, flags | O_NONBLOCK);
+
+    device->socket_ready = true;
+    out_.verbose(CALL_INFO, 1, 0, "Device %s connected\n", device->name.c_str());
+}
+
+void QEMUBinaryComponent::pollDeviceSockets() {
+    for (auto& dev : devices_) {
+        // Try to accept connection if not yet connected
+        if (!dev.socket_ready) {
+            acceptDeviceConnection(&dev);
+        }
+
+        // Poll for MMIO requests if connected
+        if (dev.socket_ready && dev.client_fd >= 0) {
+            handleMMIORequest(&dev);
+        }
+    }
+}
+
+void QEMUBinaryComponent::handleMMIORequest(DeviceInfo* device) {
+    if (!device->socket_ready || device->client_fd < 0) {
+        return;
+    }
+
+    MMIORequest req;
+    ssize_t bytes_read = read(device->client_fd, &req, sizeof(req));
+
+    if (bytes_read == 0) {
+        // Client disconnected
+        out_.verbose(CALL_INFO, 1, 0, "Device %s disconnected\n", device->name.c_str());
+        close(device->client_fd);
+        device->client_fd = -1;
+        device->socket_ready = false;
+        return;
+    }
+
+    if (bytes_read < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            out_.verbose(CALL_INFO, 1, 0, "Error reading from %s: %s\n",
+                         device->name.c_str(), strerror(errno));
+        }
+        return;
+    }
+
+    if (bytes_read != sizeof(req)) {
+        out_.verbose(CALL_INFO, 1, 0, "Incomplete request from %s\n", device->name.c_str());
+        return;
+    }
+
+    // Process request
+    out_.verbose(CALL_INFO, 2, 0, "MMIO from %s: type=%d addr=0x%016" PRIx64 " data=0x%08" PRIx64 " size=%u\n",
+                 device->name.c_str(), req.type, req.addr, req.data, req.size);
+
+    setState(QEMUState::WAITING_DEVICE);
+    sendDeviceRequest(req.type, req.addr, req.data, req.size);
+}
+
+void QEMUBinaryComponent::sendMMIOResponse(DeviceInfo* device, bool success, uint64_t data) {
+    if (!device->socket_ready || device->client_fd < 0) {
+        out_.verbose(CALL_INFO, 1, 0, "Cannot send response to %s: not connected\n",
+                     device->name.c_str());
+        return;
+    }
+
+    MMIOResponse resp;
+    resp.success = success ? 1 : 0;
+    memset(resp.reserved, 0, sizeof(resp.reserved));
+    resp.data = data;
+
+    ssize_t bytes_written = write(device->client_fd, &resp, sizeof(resp));
+
+    if (bytes_written != sizeof(resp)) {
+        out_.verbose(CALL_INFO, 1, 0, "Error sending response to %s: %s\n",
+                     device->name.c_str(), strerror(errno));
+    }
 }
 
 } // namespace QEMUBinary
