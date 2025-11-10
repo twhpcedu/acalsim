@@ -32,6 +32,8 @@ This project demonstrates cycle-accurate hardware simulation by connecting QEMU 
 
 ## Architecture
 
+### Single Server Deployment
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            SST Simulation                                   │
@@ -39,26 +41,28 @@ This project demonstrates cycle-accurate hardware simulation by connecting QEMU 
 │  ┌──────────────────┐          ┌──────────────────┐                        │
 │  │ QEMUBinary       │  MMIO    │ ACALSim Echo     │                        │
 │  │ Component        │◄────────►│ Device           │                        │
-│  │                  │  Events  │                  │                        │
-│  │                  │          └──────────────────┘                        │
-│  │                  │                                                       │
+│  │  (Rank 0)        │  Events  │                  │                        │
+│  │                  │  (SST    └──────────────────┘                        │
+│  │                  │   Links)                                              │
 │  │                  │  MMIO    ┌──────────────────┐                        │
 │  │                  │◄────────►│ ACALSim Compute  │                        │
 │  │                  │  Events  │ Device           │                        │
-│  │                  │          └──────────────────┘                        │
-│  │                  │                                                       │
+│  │                  │  (SST    └──────────────────┘                        │
+│  │                  │   Links)                                              │
 │  │                  │  MMIO    ┌──────────────────┐                        │
 │  │                  │◄────────►│ ACALSim MMIO     │                        │
 │  │                  │  Events  │ Device           │                        │
-│  │                  │          │ (with interrupts)│                        │
+│  │                  │  (SST    │ (with interrupts)│                        │
+│  │                  │   Links) │                  │                        │
 │  │                  │ Interrupt│                  │                        │
 │  │                  │◄─────────│                  │                        │
-│  └────────┬─────────┘          └──────────────────┘                        │
-│           │                                                                 │
-│           │ Unix Socket (Binary MMIO Protocol)                             │
+│  └────────┬─────────┘  (SST    └──────────────────┘                        │
+│           │             Links)                                              │
+│           │ Unix Socket (Binary MMIO Protocol - Local Only)                │
 └───────────┼─────────────────────────────────────────────────────────────────┘
             │
             │ 24-byte MMIORequest/MMIOResponse
+            │ (QEMU process must be co-located with QEMUBinary)
             │
 ┌───────────┼─────────────────────────────────────────────────────────────────┐
 │           ▼                                                                  │
@@ -70,11 +74,258 @@ This project demonstrates cycle-accurate hardware simulation by connecting QEMU 
 │                    QEMU Process                                             │
 │               (qemu-system-riscv32)                                         │
 └──────────────────────────────────────────────────────────────────────────────┘
+```
 
-Communication Patterns:
-- MMIO Transactions: CPU load/store → MemoryTransactionEvent → Device
-- MMIO Responses: Device → MemoryResponseEvent → CPU
-- Interrupts: Device → InterruptEvent (ASSERT/DEASSERT) → CPU
+### Distributed Deployment (Multi-Server)
+
+```
+Server 1 (Rank 0)                          Server 2 (Rank 1)
+┌────────────────────────────────┐         ┌────────────────────────────────┐
+│  SST Simulation                │         │  SST Simulation                │
+│                                │         │                                │
+│  ┌──────────────────┐          │         │  ┌──────────────────┐          │
+│  │ QEMUBinary       │          │  MPI    │  │ ACALSim MMIO     │          │
+│  │ Component        │◄─────────┼─────────┼─►│ Device           │          │
+│  │  (Rank 0)        │  SST     │         │  │  (Rank 1)        │          │
+│  └────────┬─────────┘  Links   │         │  └──────────────────┘          │
+│           │                    │         │                                │
+│           │ Unix Socket        │         └────────────────────────────────┘
+└───────────┼────────────────────┘
+            │
+            │ (co-located)
+            │
+┌───────────┼────────────────────┐
+│           ▼                    │
+│  ┌──────────────────┐          │
+│  │ QEMU Process     │          │
+│  └──────────────────┘          │
+└────────────────────────────────┘
+```
+
+### Communication Layers
+
+**Two distinct communication mechanisms**:
+
+1. **Unix Socket (QEMU ↔ QEMUBinary)**:
+   - Binary MMIO protocol (24-byte request, 20-byte response)
+   - Local only - QEMU process must be co-located with QEMUBinary SST component
+   - Cannot be distributed across servers
+
+2. **SST Links (QEMUBinary ↔ ACALSim Devices)**:
+   - SST Event-based communication (MemoryTransactionEvent, MemoryResponseEvent, InterruptEvent)
+   - **Supports distributed simulation via MPI**
+   - Devices can be on same server or different servers
+   - Flexible deployment: `component.setRank(N)` assigns component to specific MPI rank/server
+
+**Communication Patterns**:
+- MMIO Transactions: CPU load/store → Binary Protocol → QEMUBinary → MemoryTransactionEvent → Device
+- MMIO Responses: Device → MemoryResponseEvent → QEMUBinary → Binary Protocol → CPU
+- Interrupts: Device → InterruptEvent (ASSERT/DEASSERT) → QEMUBinary → CPU
+
+**Distributed Simulation**:
+- See `distributed_mmio_test.py` for single-device distributed example
+- See `distributed_multi_device_test.py` for N-device distributed example
+- See `acalsim-device/README_MMIO_DEVICE.md` for detailed distributed simulation guide
+- Run with: `mpirun -np N -host server1:X,server2:Y sst config.py`
+```
+
+### Multi-Device Distributed Deployment
+
+When deploying **N devices across multiple servers**, you have several partitioning strategies:
+
+#### Strategy 1: One Device Per Server (Maximum Distribution)
+
+Best for load balancing and isolating computational load:
+
+```
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  Server 1   │  │  Server 2   │  │  Server 3   │  │  Server 4   │  │  Server 5   │
+│  Rank 0     │  │  Rank 1     │  │  Rank 2     │  │  Rank 3     │  │  Rank 4     │
+├─────────────┤  ├─────────────┤  ├─────────────┤  ├─────────────┤  ├─────────────┤
+│ QEMUBinary  │  │ Device 1    │  │ Device 2    │  │ Device 3    │  │ Device 4    │
+└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
+      │                │                │                │                │
+      └────────────────┴────────────────┴────────────────┴────────────────┘
+                        SST Links (MPI Communication)
+
+# Launch command (5 servers, N=4 devices)
+mpirun -np 5 -host server1:1,server2:1,server3:1,server4:1,server5:1 \
+  sst distributed_multi_device_test.py
+```
+
+**Advantages**:
+- Maximum isolation between devices
+- Best load balancing for compute-intensive devices
+- Easy to scale by adding more servers
+
+**Disadvantages**:
+- Higher MPI communication overhead
+- More synchronization points
+- Requires more servers
+
+#### Strategy 2: Multiple Devices Per Server (Grouped Distribution)
+
+Best for tightly coupled devices that communicate frequently:
+
+```
+┌──────────────────────┐  ┌──────────────────────┐  ┌─────────────┐
+│  Server 1            │  │  Server 2            │  │  Server 3   │
+│  Rank 0              │  │  Rank 1              │  │  Rank 2     │
+├──────────────────────┤  ├──────────────────────┤  ├─────────────┤
+│  QEMUBinary          │  │  Device 1            │  │  Device 3   │
+└──────────────────────┘  │  Device 2            │  │  Device 4   │
+                          │  (peer link)         │  └─────────────┘
+                          └──────────────────────┘
+      │                             │                      │
+      └─────────────────────────────┴──────────────────────┘
+                    SST Links (MPI Communication)
+
+# Launch command (3 servers, N=4 devices)
+mpirun -np 3 -host server1:1,server2:1,server3:1 sst distributed_multi_device_test.py
+```
+
+**Advantages**:
+- Efficient inter-device communication (peer links on same rank)
+- Fewer servers required
+- Lower MPI overhead for grouped devices
+
+**Disadvantages**:
+- Load imbalance if devices have different computational requirements
+- Less isolation between grouped devices
+
+#### Strategy 3: Hybrid Distribution (Mix of Strategies)
+
+Best for heterogeneous workloads with different coupling requirements:
+
+```
+┌──────────────────────┐  ┌──────────────────────┐  ┌─────────────┐  ┌─────────────┐
+│  Server 1            │  │  Server 2            │  │  Server 3   │  │  Server 4   │
+│  Rank 0              │  │  Rank 1              │  │  Rank 2     │  │  Rank 3     │
+├──────────────────────┤  ├──────────────────────┤  ├─────────────┤  ├─────────────┤
+│  QEMUBinary          │  │  Echo Device         │  │  MMIO Dev   │  │  GPU Device │
+│                      │  │  Compute Device      │  │  (isolated) │  │  (isolated) │
+│                      │  │  (tightly coupled)   │  │             │  │             │
+└──────────────────────┘  └──────────────────────┘  └─────────────┘  └─────────────┘
+      │                             │                      │                │
+      └─────────────────────────────┴──────────────────────┴────────────────┘
+                             SST Links (MPI Communication)
+```
+
+**Use Cases**:
+- Group lightweight devices together (Echo + Compute on Rank 1)
+- Isolate interrupt-heavy devices (MMIO Device on Rank 2)
+- Isolate compute-intensive devices (GPU on Rank 3)
+
+#### Example Configuration (4 Devices, 4 Ranks)
+
+See `distributed_multi_device_test.py` for complete implementation:
+
+```python
+import sst
+
+my_rank, num_ranks = sst.getMPIRankCount()
+
+# Rank 0: QEMU Component
+if my_rank == 0:
+    qemu = sst.Component("qemu0", "acalsim.QEMUBinary")
+    qemu.addParams({"socket_path": "/tmp/qemu_sst.sock"})
+    qemu.setRank(0)
+
+# Rank 1: Echo Device 1 + Compute Device (tightly coupled)
+if my_rank == 1:
+    echo_dev1 = sst.Component("echo1", "acalsim.QEMUDevice")
+    echo_dev1.setRank(1)
+
+    compute_dev = sst.Component("compute", "acalsim.ComputeDevice")
+    compute_dev.setRank(1)
+
+    # Peer link for efficient local communication
+    peer_link = sst.Link("echo_compute_peer")
+    peer_link.connect((echo_dev1, "peer_port"), (compute_dev, "peer_port"))
+
+# Rank 2: MMIO Device (isolated)
+if my_rank == 2:
+    mmio_dev = sst.Component("mmio", "acalsim.MMIODevice")
+    mmio_dev.setRank(2)
+
+# Rank 3: Echo Device 2 (isolated)
+if my_rank == 3:
+    echo_dev2 = sst.Component("echo2", "acalsim.QEMUDevice")
+    echo_dev2.setRank(3)
+
+# SST Links connect all devices to QEMU (cross-rank via MPI)
+sst.Link("link_echo1").connect((qemu, "device_port_0"), (echo_dev1, "cpu_port"))
+sst.Link("link_compute").connect((qemu, "device_port_1"), (compute_dev, "cpu_port"))
+sst.Link("link_mmio").connect((qemu, "device_port_2"), (mmio_dev, "cpu_port"))
+sst.Link("link_echo2").connect((qemu, "device_port_3"), (echo_dev2, "cpu_port"))
+```
+
+#### MPI Launch Commands
+
+**4 servers (one device per server)**:
+```bash
+mpirun -np 4 -host server1:1,server2:1,server3:1,server4:1 \
+  sst distributed_multi_device_test.py
+```
+
+**2 servers (split devices evenly)**:
+```bash
+# Rank 0 on server1, Ranks 1-3 on server2
+mpirun -np 4 -host server1:1,server2:3 \
+  sst distributed_multi_device_test.py
+```
+
+**Single server (testing)**:
+```bash
+# 4 processes on localhost
+mpirun -np 4 sst distributed_multi_device_test.py
+```
+
+**Using hostfile**:
+```bash
+# Create hosts.txt:
+# server1 slots=1   # QEMU
+# server2 slots=2   # Echo1 + Compute
+# server3 slots=1   # MMIO
+# server4 slots=1   # Echo2
+
+mpirun -np 5 -hostfile hosts.txt sst distributed_multi_device_test.py
+```
+
+#### Scaling to N Devices
+
+**General pattern for N devices**:
+
+1. **Determine partitioning strategy**:
+   - Device coupling requirements (peer links needed?)
+   - Computational load per device
+   - Available servers
+
+2. **Assign ranks**:
+   - Rank 0: Always QEMUBinary (with QEMU process)
+   - Ranks 1 to N: Distribute devices based on strategy
+   - Use `component.setRank(R)` for each device
+
+3. **Configure SST links**:
+   - Each device needs link to `qemu.device_port_X`
+   - Interrupt devices need link to `qemu.irq_port_X`
+   - Peer links for devices on same rank
+
+4. **Launch with appropriate MPI command**:
+   - Total ranks = 1 (QEMU) + N_device_ranks
+   - Distribute ranks across servers via `-host` or `-hostfile`
+
+**Example for 10 devices across 6 servers**:
+```python
+# Rank 0: QEMU (server1)
+# Rank 1: Device 0-2 (server2) - grouped
+# Rank 2: Device 3-4 (server3) - grouped
+# Rank 3: Device 5   (server4) - isolated
+# Rank 4: Device 6-8 (server5) - grouped
+# Rank 5: Device 9   (server6) - isolated
+
+mpirun -np 6 -host server1:1,server2:1,server3:1,server4:1,server5:1,server6:1 \
+  sst config_10_devices.py
 ```
 
 ### Binary MMIO Protocol
@@ -101,6 +352,69 @@ struct MMIOResponse {
 ```
 
 **Performance**: ~10,000 transactions/sec, ~100μs latency (10x improvement over Phase 2B)
+
+## Shared Library Architecture
+
+To eliminate code duplication and improve maintainability, SST device components are organized in a shared library structure:
+
+```
+projects/acalsim/
+├── include/sst/                        # Shared SST component headers
+│   ├── ACALSimDeviceComponent.hh       # Echo device header
+│   ├── ACALSimComputeDeviceComponent.hh    # Compute device header
+│   ├── ACALSimMMIODevice.hh            # MMIO device with interrupts
+│   └── QEMUBinaryComponent.hh          # QEMU binary protocol component
+│
+├── libs/sst/                           # Shared SST component implementations
+│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
+│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
+│   ├── ACALSimMMIODevice.cc            # MMIO device implementation
+│   └── QEMUBinaryComponent.cc          # QEMU binary implementation
+│
+├── src/qemu-acalsim-sst-baremetal/     # Baremetal integration
+│   ├── acalsim-device/                 # Uses shared libs/sst components
+│   │   └── Makefile                    # Compiles from shared sources
+│   └── qemu-binary/                    # Uses shared libs/sst components
+│       └── Makefile                    # Compiles from shared sources
+│
+└── src/qemu-acalsim-sst-baremetal-HSA/ # HSA integration
+    ├── acalsim-device/                 # Uses shared libs/sst components
+    │   └── Makefile                    # Compiles from shared sources
+    └── qemu-binary/                    # Uses shared libs/sst components
+        └── Makefile                    # Compiles from shared sources
+```
+
+### Benefits
+
+- **Single Source of Truth**: All SST components maintained in one location
+- **Zero Duplication**: Baremetal and HSA variants share identical SST integration code
+- **Easier Maintenance**: Bug fixes and enhancements automatically apply to both variants
+- **Consistent Interface**: All projects use the same device APIs and protocols
+
+### Build System Integration
+
+Each project's Makefile references the shared library:
+
+```makefile
+# Shared framework directories
+FRAMEWORK_ROOT = ../../..
+SST_SRC_DIR = $(FRAMEWORK_ROOT)/libs/sst
+INCLUDE_DIR = $(FRAMEWORK_ROOT)/include
+
+# Include paths
+INCLUDES = -I$(INCLUDE_DIR)
+
+# Shared SST framework sources
+SST_SOURCES = $(SST_SRC_DIR)/ACALSimDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimComputeDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimMMIODevice.cc
+```
+
+The shared components include:
+- **Device Components**: Echo, Compute, MMIO devices with interrupt support
+- **QEMU Integration**: Binary MMIO protocol and event translation
+- **Common Events**: MemoryTransactionEvent, MemoryResponseEvent, InterruptEvent
+- **Statistics Support**: Unified SST statistics infrastructure
 
 ## Components
 
@@ -212,50 +526,60 @@ sst qemu_multi_device_test.py
 ## Project Structure
 
 ```
-qemu-acalsim-sst-baremetal/
-├── README.md                           # This file
-├── GETTING_STARTED.md                  # Complete user guide
-├── DEVELOPER_GUIDE.md                  # Comprehensive developer documentation
-├── DEMO_EXAMPLE.md                     # Concrete working examples
-├── DOCKER.md                           # Docker-specific instructions
+projects/acalsim/                       # ACALSim framework root
 │
-├── docs/                               # Documentation
-│   └── archive/                        # Historical development documents
-│
-├── riscv-programs/                     # Bare-metal RISC-V test programs
-│   ├── crt0.S                          # C runtime startup
-│   ├── start.S                         # Simple startup (legacy)
-│   ├── linker.ld                       # Linker script
-│   ├── mmio_test.c                     # Single-device MMIO test
-│   ├── mmio_test_main.c                # Test with proper main()
-│   ├── multi_device_test.c             # Multi-device test
-│   ├── test_4devices.c                 # 4-device scalability test
-│   ├── asm_link_test.c                 # C-assembly linkage test
-│   ├── asm_test.S                      # Assembly test functions
-│   └── Makefile                        # Build system
-│
-├── qemu-sst-device/                    # QEMU device implementation
-│   ├── sst-device.c                    # QEMU device (integrate into QEMU)
-│   └── sst-device.h                    # Device header
-│
-├── qemu-binary/                        # SST QEMUBinary component (N-device support)
-│   ├── QEMUBinaryComponent.hh          # Component header with DeviceInfo
-│   ├── QEMUBinaryComponent.cc          # N-socket implementation
-│   ├── Makefile                        # Build system
-│   └── *.md                            # Implementation documentation
-│
-├── acalsim-device/                     # SST device components
+├── include/sst/                        # Shared SST component headers
 │   ├── ACALSimDeviceComponent.hh       # Echo device header
-│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
 │   ├── ACALSimComputeDeviceComponent.hh    # Compute device header
-│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
-│   ├── Makefile                        # Build system
-│   └── README.md                       # Component documentation
+│   ├── ACALSimMMIODevice.hh            # MMIO device with interrupts
+│   └── QEMUBinaryComponent.hh          # QEMU binary protocol component
 │
-├── qemu_binary_test.py                 # SST config: single device test
-├── qemu_multi_device_test.py           # SST config: 2-device test
-└── qemu_4device_test.py                # SST config: 4-device scalability test
+├── libs/sst/                           # Shared SST component implementations
+│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
+│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
+│   ├── ACALSimMMIODevice.cc            # MMIO device implementation
+│   └── QEMUBinaryComponent.cc          # QEMU binary implementation
+│
+└── src/qemu-acalsim-sst-baremetal/     # Baremetal integration project
+    ├── README.md                       # This file
+    ├── GETTING_STARTED.md              # Complete user guide
+    ├── DEVELOPER_GUIDE.md              # Comprehensive developer documentation
+    ├── DEMO_EXAMPLE.md                 # Concrete working examples
+    ├── DOCKER.md                       # Docker-specific instructions
+    │
+    ├── docs/                           # Documentation
+    │   └── archive/                    # Historical development documents
+    │
+    ├── riscv-programs/                 # Bare-metal RISC-V test programs
+    │   ├── crt0.S                      # C runtime startup
+    │   ├── start.S                     # Simple startup (legacy)
+    │   ├── linker.ld                   # Linker script
+    │   ├── mmio_test.c                 # Single-device MMIO test
+    │   ├── mmio_test_main.c            # Test with proper main()
+    │   ├── multi_device_test.c         # Multi-device test
+    │   ├── test_4devices.c             # 4-device scalability test
+    │   ├── asm_link_test.c             # C-assembly linkage test
+    │   ├── asm_test.S                  # Assembly test functions
+    │   └── Makefile                    # Build system
+    │
+    ├── qemu-sst-device/                # QEMU device implementation
+    │   ├── sst-device.c                # QEMU device (integrate into QEMU)
+    │   └── sst-device.h                # Device header
+    │
+    ├── qemu-binary/                    # SST QEMUBinary component (uses shared libs/sst)
+    │   ├── Makefile                    # Builds from ../../../libs/sst/QEMUBinaryComponent.cc
+    │   └── *.md                        # Implementation documentation
+    │
+    ├── acalsim-device/                 # SST device components (uses shared libs/sst)
+    │   ├── Makefile                    # Builds from ../../../libs/sst/*.cc
+    │   └── README.md                   # Component documentation
+    │
+    ├── qemu_binary_test.py             # SST config: single device test
+    ├── qemu_multi_device_test.py       # SST config: 2-device test
+    └── qemu_4device_test.py            # SST config: 4-device scalability test
 ```
+
+**Note**: SST component source files (*.hh, *.cc) are now in the shared `include/sst/` and `libs/sst/` directories. The `acalsim-device/` and `qemu-binary/` directories contain only Makefiles that compile from the shared sources.
 
 ## Single Device Example
 

@@ -25,25 +25,28 @@ SST_ELEMENT_DIR = $(SST_INSTALL_DIR)/lib/sstcore
 # Shared framework directories
 FRAMEWORK_ROOT = ../../..
 HSA_SRC_DIR = $(FRAMEWORK_ROOT)/libs/HSA
-HSA_INCLUDE_DIR = $(FRAMEWORK_ROOT)/include
+SST_SRC_DIR = $(FRAMEWORK_ROOT)/libs/sst
+INCLUDE_DIR = $(FRAMEWORK_ROOT)/include
 
 # Include paths
-INCLUDES = -I$(HSA_INCLUDE_DIR)
+INCLUDES = -I$(INCLUDE_DIR)
 
 # Component name and files
 COMPONENT_NAME = libacalsim.so
 
-# Local device sources
-LOCAL_SOURCES = ACALSimDeviceComponent.cc ACALSimComputeDeviceComponent.cc ACALSimMMIODevice.cc
-LOCAL_HEADERS = ACALSimDeviceComponent.hh ACALSimComputeDeviceComponent.hh ACALSimMMIODevice.hh
+# Shared SST framework sources (devices)
+SST_SOURCES = $(SST_SRC_DIR)/ACALSimDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimComputeDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimMMIODevice.cc
 
 # Shared HSA framework sources
 HSA_SOURCES = $(HSA_SRC_DIR)/HSAHostComponent.cc $(HSA_SRC_DIR)/HSAComputeComponent.cc
 
 # All sources and objects
-SOURCES = $(LOCAL_SOURCES) $(HSA_SOURCES)
-OBJECTS = $(LOCAL_SOURCES:.cc=.o) HSAHostComponent.o HSAComputeComponent.o
-HEADERS = $(LOCAL_HEADERS)
+SOURCES = $(SST_SOURCES) $(HSA_SOURCES)
+SST_OBJECTS = ACALSimDeviceComponent.o ACALSimComputeDeviceComponent.o ACALSimMMIODevice.o
+HSA_OBJECTS = HSAHostComponent.o HSAComputeComponent.o
+OBJECTS = $(SST_OBJECTS) $(HSA_OBJECTS)
 
 # Default target
 all: $(COMPONENT_NAME)
@@ -54,6 +57,16 @@ $(COMPONENT_NAME): $(OBJECTS)
 
 # Compile local source files
 %.o: %.cc $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+# Compile SST framework sources
+ACALSimDeviceComponent.o: $(SST_SRC_DIR)/ACALSimDeviceComponent.cc
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+ACALSimComputeDeviceComponent.o: $(SST_SRC_DIR)/ACALSimComputeDeviceComponent.cc
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+ACALSimMMIODevice.o: $(SST_SRC_DIR)/ACALSimMMIODevice.cc
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
 
 # Compile HSA framework sources

@@ -27,6 +27,7 @@ Complete guide for creating ACALSim-based MMIO devices that communicate with QEM
 - [Implementation Example](#implementation-example)
 - [Driver Code Example](#driver-code-example)
 - [SST Configuration](#sst-configuration)
+- [Distributed Simulation](#distributed-simulation)
 - [Best Practices](#best-practices)
 
 ## Overview
@@ -646,6 +647,258 @@ mmio_dev.enableAllStatistics()
 # Simulation parameters
 sst.setProgramOption("stop-at", "10ms")
 ```
+
+## Distributed Simulation
+
+### Architecture Overview
+
+The ACALSim framework supports **distributed simulation** where QEMU and ACALSim devices can run on the same server or different physical servers using SST's MPI-based distributed simulation capability.
+
+#### Communication Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  Communication Layers                                             │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  QEMU Process ←──Unix Socket──→ QEMUBinary SST Component         │
+│  (co-located, same server)                                        │
+│                                                                   │
+│  QEMUBinary ←──SST Links (MPI)──→ ACALSim Devices                │
+│  (can be on different servers/ranks)                              │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**Key Points**:
+- **Unix Socket**: QEMU process must be co-located with QEMUBinary SST component (same server)
+- **SST Links**: QEMUBinary and ACALSim devices communicate via SST links that support distributed simulation via MPI
+- **Flexibility**: ACALSim devices can be on the same server (single process) or different servers (distributed)
+
+### Distributed Deployment Example
+
+#### Single Server Configuration (Default)
+
+```
+┌─────────────────────────────────────────────────┐
+│  Server: localhost                              │
+│  ┌──────────────┐      ┌──────────────────┐    │
+│  │ QEMUBinary   │      │ ACALSimMMIODevice│    │
+│  │ (Rank 0)     │◄────►│ (Rank 0)         │    │
+│  └──────────────┘      └──────────────────┘    │
+└─────────────────────────────────────────────────┘
+
+# Run with single process
+sst mmio_device_test.py
+```
+
+#### Two Server Configuration (Distributed)
+
+```
+┌─────────────────────────────┐    ┌─────────────────────────────┐
+│  Server 1: compute-node-1   │    │  Server 2: compute-node-2   │
+│  ┌──────────────┐           │    │  ┌──────────────────┐       │
+│  │ QEMUBinary   │           │    │  │ ACALSimMMIODevice│       │
+│  │ (Rank 0)     │◄──MPI────────────►│ (Rank 1)         │       │
+│  └──────────────┘           │    │  └──────────────────┘       │
+└─────────────────────────────┘    └─────────────────────────────┘
+
+# Run with distributed processes
+mpirun -np 2 -host compute-node-1:1,compute-node-2:1 sst distributed_mmio_test.py
+```
+
+### Configuration Example
+
+See `distributed_mmio_test.py` for a complete example. Key elements:
+
+```python
+import sst
+
+# Get MPI rank information
+my_rank = sst.getMPIRankCount()[0]
+num_ranks = sst.getMPIRankCount()[1]
+
+#
+# Rank 0: QEMU Component (must be co-located with QEMU process)
+#
+if my_rank == 0:
+    qemu = sst.Component("qemu0", "acalsim.QEMUBinary")
+    qemu.addParams({
+        "qemu_binary": qemu_binary,
+        "socket_path": "/tmp/qemu_sst_distributed.sock",
+        # ... other params
+    })
+    qemu.setRank(0)  # Assign to rank 0
+else:
+    # Other ranks still need to declare for link connections
+    qemu = sst.Component("qemu0", "acalsim.QEMUBinary")
+    qemu.setRank(0)
+
+#
+# Rank 1: MMIO Device Component (can be on different server)
+#
+if my_rank == 1:
+    mmio_device = sst.Component("mmio_device0", "acalsim.MMIODevice")
+    mmio_device.addParams({
+        "base_addr": "0x10001000",
+        # ... other params
+    })
+    mmio_device.setRank(1)  # Assign to rank 1
+else:
+    mmio_device = sst.Component("mmio_device0", "acalsim.MMIODevice")
+    mmio_device.setRank(1)
+
+#
+# SST Links: Cross-rank communication via MPI
+#
+cpu_link = sst.Link("qemu_mmio_cpu_link")
+cpu_link.connect(
+    (qemu, "device_port_0", "1ns"),
+    (mmio_device, "cpu_port", "1ns")
+)
+
+irq_link = sst.Link("qemu_mmio_irq_link")
+irq_link.connect(
+    (mmio_device, "irq_port", "1ns"),
+    (qemu, "irq_port_0", "1ns")
+)
+```
+
+### Running Distributed Simulations
+
+#### MPI Launch Commands
+
+**Single server (for testing)**:
+```bash
+# Run 2 ranks on localhost
+mpirun -np 2 sst distributed_mmio_test.py
+```
+
+**Two servers**:
+```bash
+# Method 1: Host list
+mpirun -np 2 -host server1:1,server2:1 sst distributed_mmio_test.py
+
+# Method 2: Explicit host assignment
+mpirun -H server1 -np 1 sst distributed_mmio_test.py : \
+       -H server2 -np 1 sst distributed_mmio_test.py
+
+# Method 3: Using hostfile
+mpirun -np 2 -hostfile hosts.txt sst distributed_mmio_test.py
+```
+
+**Multiple devices across multiple servers**:
+```bash
+# 4 ranks: QEMU on rank 0, 3 devices on ranks 1-3
+mpirun -np 4 \
+  -host server1:1,server2:1,server3:1,server4:1 \
+  sst distributed_multi_device.py
+```
+
+#### Hostfile Format
+
+Create `hosts.txt`:
+```
+server1 slots=1
+server2 slots=1
+server3 slots=2  # Run 2 ranks on this server
+```
+
+### Performance Considerations
+
+#### Network Latency
+
+When running distributed simulations, consider network latency between servers:
+
+```python
+# Increase link latency to account for network
+cpu_link.connect(
+    (qemu, "device_port_0", "100ns"),      # Higher latency for cross-server
+    (mmio_device, "cpu_port", "100ns")
+)
+```
+
+#### Synchronization
+
+SST handles synchronization between ranks automatically, but consider:
+- **Event serialization overhead**: Cross-rank events require serialization
+- **Synchronization barriers**: More ranks = more synchronization points
+- **Load balancing**: Distribute computational load evenly across ranks
+
+#### Optimal Partitioning
+
+Guidelines for component placement:
+1. **Keep tightly coupled components together**: High-frequency communication → same rank
+2. **Balance computation**: Distribute expensive devices across ranks
+3. **Minimize cross-rank traffic**: Group components that communicate frequently
+
+Example:
+```python
+# Good: Tightly coupled devices on same rank
+if my_rank == 1:
+    device1 = sst.Component("dev1", "acalsim.MMIODevice")
+    device2 = sst.Component("dev2", "acalsim.ComputeDevice")
+    # Both on rank 1, can communicate efficiently
+
+# Suboptimal: Devices that need frequent sync on different ranks
+# device1 on rank 1, device2 on rank 2 → high MPI overhead
+```
+
+### Debugging Distributed Simulations
+
+#### Enable Verbose Output
+
+```python
+# In configuration
+qemu.addParams({"verbose": "2"})
+mmio_device.addParams({"verbose": "2"})
+```
+
+#### Check Rank Assignment
+
+The example configuration prints rank information:
+```
+[Rank 0/2] Configuring distributed simulation...
+[Rank 0/2] Components on this rank: QEMUBinary
+[Rank 1/2] Configuring distributed simulation...
+[Rank 1/2] Components on this rank: ACALSimMMIODevice
+```
+
+#### MPI Debugging
+
+```bash
+# Enable MPI debug output
+mpirun --debug-devel -np 2 sst distributed_mmio_test.py
+
+# Attach debugger to specific rank
+mpirun -np 2 xterm -e gdb -ex "run" --args sst distributed_mmio_test.py
+```
+
+### Limitations and Requirements
+
+**Requirements**:
+- SST-Core built with MPI support (`--with-mpi` during configure)
+- MPI implementation (OpenMPI, MPICH, etc.) installed
+- Network connectivity between servers (for multi-server deployment)
+- Shared filesystem or identical file paths on all servers
+
+**Limitations**:
+- **QEMU Process**: Must be co-located with QEMUBinary (connected via Unix socket)
+- **File Paths**: QEMU binary, kernel, and BIOS paths must be accessible from rank 0
+- **Socket Paths**: Use unique socket paths to avoid conflicts when testing with multiple ranks on same server
+
+**Example with unique socket paths**:
+```python
+# Avoid conflicts when testing multiple ranks on localhost
+socket_path = f"/tmp/qemu_sst_{my_rank}.sock"
+qemu.addParams({"socket_path": socket_path})
+```
+
+### Example Files
+
+- **distributed_mmio_test.py**: Complete distributed simulation example
+- **qemu_4device_test.py**: Multi-device example (can be adapted for distributed)
+- **README.md**: Main project documentation with architecture overview
 
 ## Best Practices
 

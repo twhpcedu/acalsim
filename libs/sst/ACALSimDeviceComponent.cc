@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ACALSimDeviceComponent.hh"
+#include "sst/ACALSimDeviceComponent.hh"
 
 #include <sst/core/sst_config.h>
 

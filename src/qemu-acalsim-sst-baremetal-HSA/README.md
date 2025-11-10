@@ -75,7 +75,95 @@ Communication Patterns:
 - MMIO Transactions: CPU load/store → MemoryTransactionEvent → Device
 - MMIO Responses: Device → MemoryResponseEvent → CPU
 - Interrupts: Device → InterruptEvent (ASSERT/DEASSERT) → CPU
+- HSA Packets: Host Agent → AQL Dispatch → Compute Agents
+- HSA Completion: Compute Agents → Completion Signal → Host Agent
 ```
+
+### Distributed Simulation
+
+The framework supports **distributed simulation** where QEMU and ACALSim/HSA components can run on different physical servers using SST's MPI-based distributed simulation.
+
+#### Communication Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  Communication Layers                                             │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  QEMU Process ←──Unix Socket──→ QEMUBinary SST Component         │
+│  (co-located, same server)                                        │
+│                                                                   │
+│  QEMUBinary ←──SST Links (MPI)──→ ACALSim/HSA Components          │
+│  (can be on different servers/ranks)                              │
+│                                                                   │
+│  HSA Host ←──AQL Packets (MPI)──→ HSA Compute Agents              │
+│  (distributed heterogeneous compute)                              │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+#### HSA Distributed Deployment Example
+
+```
+┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐
+│  Server 1 (Rank 0)          │  │  Server 2 (Rank 1)          │  │  Server 3 (Rank 2)          │
+├─────────────────────────────┤  ├─────────────────────────────┤  ├─────────────────────────────┤
+│  QEMUBinary                 │  │  HSA Compute Agent 1        │  │  HSA Compute Agent 2        │
+│  HSA Host Agent             │  │  (16 CUs @ 2GHz)            │  │  (16 CUs @ 2GHz)            │
+│  (AQL packet dispatch)      │  │                             │  │                             │
+└─────────────────────────────┘  └─────────────────────────────┘  └─────────────────────────────┘
+         │                                  │                                  │
+         │           SST Links (MPI)        │                                  │
+         └──────────────────────────────────┴──────────────────────────────────┘
+                          AQL Dispatch + Completion
+
+# Launch command
+mpirun -np 3 -host server1:1,server2:1,server3:1 sst qemu-binary/distributed_hsa_test.py
+```
+
+**Key Points**:
+- **QEMUBinary + HSA Host**: Co-located on rank 0 for efficient CPU-HSA communication
+- **HSA Compute Agents**: Distributed on ranks 1-N for parallel heterogeneous compute
+- **AQL Packets**: Dispatched from Host to Compute agents via MPI
+- **Completion Signals**: Returned from Compute agents to Host via MPI
+
+#### Scaling HSA to N Compute Agents
+
+**Example: 8 Compute Agents across 5 servers**:
+
+```python
+# Rank 0: QEMU + HSA Host (server1)
+# Rank 1: Compute Agents 0-1 (server2) - grouped
+# Rank 2: Compute Agents 2-3 (server3) - grouped
+# Rank 3: Compute Agents 4-5 (server4) - grouped
+# Rank 4: Compute Agents 6-7 (server5) - grouped
+
+mpirun -np 5 -host server1:1,server2:1,server3:1,server4:1,server5:1 \
+  sst config_8_compute_agents.py
+```
+
+**MPI Launch Options**:
+```bash
+# Single server testing
+mpirun -np 3 sst qemu-binary/distributed_hsa_test.py
+
+# Two servers (host + all compute agents on second server)
+mpirun -np 2 -host server1:1,server2:1 sst qemu-binary/distributed_hsa_test.py
+
+# Using hostfile
+cat > hosts.txt <<EOF
+server1 slots=1   # QEMU + HSA Host
+server2 slots=2   # Compute Agents 1-2
+server3 slots=2   # Compute Agents 3-4
+EOF
+
+mpirun -np 5 -hostfile hosts.txt sst config.py
+```
+
+**Distributed Simulation Examples**:
+- `qemu-binary/distributed_hsa_test.py` - HSA Host + 2 Compute Agents across 3 servers
+- See baremetal `distributed_multi_device_test.py` for N-device patterns
+- See `acalsim-device/README_MMIO_DEVICE.md` for detailed distributed simulation guide
 
 ### Binary MMIO Protocol
 
@@ -101,6 +189,75 @@ struct MMIOResponse {
 ```
 
 **Performance**: ~10,000 transactions/sec, ~100μs latency (10x improvement over Phase 2B)
+
+## Shared Library Architecture
+
+To eliminate code duplication and improve maintainability, SST device components are organized in a shared library structure:
+
+```
+projects/acalsim/
+├── include/sst/                        # Shared SST component headers
+│   ├── ACALSimDeviceComponent.hh       # Echo device header
+│   ├── ACALSimComputeDeviceComponent.hh    # Compute device header
+│   ├── ACALSimMMIODevice.hh            # MMIO device with interrupts
+│   └── QEMUBinaryComponent.hh          # QEMU binary protocol component
+│
+├── libs/sst/                           # Shared SST component implementations
+│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
+│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
+│   ├── ACALSimMMIODevice.cc            # MMIO device implementation
+│   └── QEMUBinaryComponent.cc          # QEMU binary implementation
+│
+├── src/qemu-acalsim-sst-baremetal/     # Baremetal integration
+│   ├── acalsim-device/                 # Uses shared libs/sst components
+│   │   └── Makefile                    # Compiles from shared sources
+│   └── qemu-binary/                    # Uses shared libs/sst components
+│       └── Makefile                    # Compiles from shared sources
+│
+└── src/qemu-acalsim-sst-baremetal-HSA/ # HSA integration
+    ├── acalsim-device/                 # Uses shared libs/sst components
+    │   └── Makefile                    # Compiles from shared sources + HSA
+    └── qemu-binary/                    # Uses shared libs/sst components
+        └── Makefile                    # Compiles from shared sources
+```
+
+### Benefits
+
+- **Single Source of Truth**: All SST components maintained in one location
+- **Zero Duplication**: Baremetal and HSA variants share identical SST integration code
+- **Easier Maintenance**: Bug fixes and enhancements automatically apply to both variants
+- **Consistent Interface**: All projects use the same device APIs and protocols
+
+### Build System Integration
+
+Each project's Makefile references the shared library:
+
+```makefile
+# Shared framework directories
+FRAMEWORK_ROOT = ../../..
+SST_SRC_DIR = $(FRAMEWORK_ROOT)/libs/sst
+HSA_SRC_DIR = $(FRAMEWORK_ROOT)/libs/HSA
+INCLUDE_DIR = $(FRAMEWORK_ROOT)/include
+
+# Include paths
+INCLUDES = -I$(INCLUDE_DIR)
+
+# Shared SST framework sources (devices)
+SST_SOURCES = $(SST_SRC_DIR)/ACALSimDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimComputeDeviceComponent.cc \
+              $(SST_SRC_DIR)/ACALSimMMIODevice.cc
+
+# Shared HSA framework sources
+HSA_SOURCES = $(HSA_SRC_DIR)/HSAHostComponent.cc \
+              $(HSA_SRC_DIR)/HSAComputeComponent.cc
+```
+
+The shared components include:
+- **Device Components**: Echo, Compute, MMIO devices with interrupt support
+- **QEMU Integration**: Binary MMIO protocol and event translation
+- **Common Events**: MemoryTransactionEvent, MemoryResponseEvent, InterruptEvent
+- **Statistics Support**: Unified SST statistics infrastructure
+- **HSA Components**: HSA Host Agent and Compute Agent implementations
 
 ## Components
 
@@ -212,50 +369,65 @@ sst qemu_multi_device_test.py
 ## Project Structure
 
 ```
-qemu-acalsim-sst-baremetal/
-├── README.md                           # This file
-├── GETTING_STARTED.md                  # Complete user guide
-├── DEVELOPER_GUIDE.md                  # Comprehensive developer documentation
-├── DEMO_EXAMPLE.md                     # Concrete working examples
-├── DOCKER.md                           # Docker-specific instructions
+projects/acalsim/                       # ACALSim framework root
 │
-├── docs/                               # Documentation
-│   └── archive/                        # Historical development documents
-│
-├── riscv-programs/                     # Bare-metal RISC-V test programs
-│   ├── crt0.S                          # C runtime startup
-│   ├── start.S                         # Simple startup (legacy)
-│   ├── linker.ld                       # Linker script
-│   ├── mmio_test.c                     # Single-device MMIO test
-│   ├── mmio_test_main.c                # Test with proper main()
-│   ├── multi_device_test.c             # Multi-device test
-│   ├── test_4devices.c                 # 4-device scalability test
-│   ├── asm_link_test.c                 # C-assembly linkage test
-│   ├── asm_test.S                      # Assembly test functions
-│   └── Makefile                        # Build system
-│
-├── qemu-sst-device/                    # QEMU device implementation
-│   ├── sst-device.c                    # QEMU device (integrate into QEMU)
-│   └── sst-device.h                    # Device header
-│
-├── qemu-binary/                        # SST QEMUBinary component (N-device support)
-│   ├── QEMUBinaryComponent.hh          # Component header with DeviceInfo
-│   ├── QEMUBinaryComponent.cc          # N-socket implementation
-│   ├── Makefile                        # Build system
-│   └── *.md                            # Implementation documentation
-│
-├── acalsim-device/                     # SST device components
+├── include/sst/                        # Shared SST component headers
 │   ├── ACALSimDeviceComponent.hh       # Echo device header
-│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
 │   ├── ACALSimComputeDeviceComponent.hh    # Compute device header
-│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
-│   ├── Makefile                        # Build system
-│   └── README.md                       # Component documentation
+│   ├── ACALSimMMIODevice.hh            # MMIO device with interrupts
+│   └── QEMUBinaryComponent.hh          # QEMU binary protocol component
 │
-├── qemu_binary_test.py                 # SST config: single device test
-├── qemu_multi_device_test.py           # SST config: 2-device test
-└── qemu_4device_test.py                # SST config: 4-device scalability test
+├── libs/sst/                           # Shared SST component implementations
+│   ├── ACALSimDeviceComponent.cc       # Echo device implementation
+│   ├── ACALSimComputeDeviceComponent.cc    # Compute device implementation
+│   ├── ACALSimMMIODevice.cc            # MMIO device implementation
+│   └── QEMUBinaryComponent.cc          # QEMU binary implementation
+│
+├── libs/HSA/                           # HSA-specific implementations
+│   ├── HSAHostComponent.cc             # HSA Host Agent
+│   └── HSAComputeComponent.cc          # HSA Compute Agent
+│
+└── src/qemu-acalsim-sst-baremetal-HSA/ # HSA integration project
+    ├── README.md                       # This file
+    ├── README_HSA.md                   # HSA-specific documentation
+    ├── GETTING_STARTED.md              # Complete user guide
+    ├── DEVELOPER_GUIDE.md              # Comprehensive developer documentation
+    ├── DEMO_EXAMPLE.md                 # Concrete working examples
+    ├── DOCKER.md                       # Docker-specific instructions
+    │
+    ├── docs/                           # Documentation
+    │   └── archive/                    # Historical development documents
+    │
+    ├── riscv-programs/                 # Bare-metal RISC-V test programs
+    │   ├── crt0.S                      # C runtime startup
+    │   ├── start.S                     # Simple startup (legacy)
+    │   ├── linker.ld                   # Linker script
+    │   ├── mmio_test.c                 # Single-device MMIO test
+    │   ├── mmio_test_main.c            # Test with proper main()
+    │   ├── multi_device_test.c         # Multi-device test
+    │   ├── test_4devices.c             # 4-device scalability test
+    │   ├── asm_link_test.c             # C-assembly linkage test
+    │   ├── asm_test.S                  # Assembly test functions
+    │   └── Makefile                    # Build system
+    │
+    ├── qemu-sst-device/                # QEMU device implementation
+    │   ├── sst-device.c                # QEMU device (integrate into QEMU)
+    │   └── sst-device.h                # Device header
+    │
+    ├── qemu-binary/                    # SST QEMUBinary component (uses shared libs/sst)
+    │   ├── Makefile                    # Builds from ../../../libs/sst/QEMUBinaryComponent.cc
+    │   └── *.md                        # Implementation documentation
+    │
+    ├── acalsim-device/                 # SST device components (uses shared libs/sst + libs/HSA)
+    │   ├── Makefile                    # Builds from ../../../libs/sst/*.cc + ../../../libs/HSA/*.cc
+    │   └── README.md                   # Component documentation
+    │
+    ├── qemu_binary_test.py             # SST config: single device test
+    ├── qemu_multi_device_test.py       # SST config: 2-device test
+    └── qemu_4device_test.py            # SST config: 4-device scalability test
 ```
+
+**Note**: SST component source files (*.hh, *.cc) are now in the shared `include/sst/` and `libs/sst/` directories. HSA-specific components are in `libs/HSA/`. The `acalsim-device/` and `qemu-binary/` directories contain only Makefiles that compile from the shared sources.
 
 ## Single Device Example
 

@@ -21,10 +21,17 @@ LDFLAGS = $(shell sst-config --ELEMENT_LDFLAGS)
 SST_INSTALL_DIR = $(shell sst-config --prefix)
 SST_ELEMENT_DIR = $(SST_INSTALL_DIR)/lib/sstcore
 
+# Shared framework directories
+FRAMEWORK_ROOT = ../../..
+SST_SRC_DIR = $(FRAMEWORK_ROOT)/libs/sst
+INCLUDE_DIR = $(FRAMEWORK_ROOT)/include
+
+# Include paths
+INCLUDES = -I$(INCLUDE_DIR)
+
 COMPONENT_NAME = libqemubinary.so
-SOURCES = QEMUBinaryComponent.cc
-OBJECTS = $(SOURCES:.cc=.o)
-HEADERS = QEMUBinaryComponent.hh
+SOURCES = $(SST_SRC_DIR)/QEMUBinaryComponent.cc
+OBJECTS = QEMUBinaryComponent.o
 
 all: $(COMPONENT_NAME)
 
@@ -33,9 +40,10 @@ $(COMPONENT_NAME): $(OBJECTS)
 	$(CXX) $(LDFLAGS) -shared -fPIC -o $@ $^
 	@echo "Build complete: $(COMPONENT_NAME)"
 
-%.o: %.cc $(HEADERS)
+# Compile SST framework source
+QEMUBinaryComponent.o: $(SST_SRC_DIR)/QEMUBinaryComponent.cc
 	@echo "Compiling $<..."
-	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
 
 install: $(COMPONENT_NAME)
 	@echo "Installing to $(SST_ELEMENT_DIR)..."

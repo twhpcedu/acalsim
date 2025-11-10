@@ -17,12 +17,13 @@
 #ifndef __ACALSIM_MMIO_DEVICE_HH__
 #define __ACALSIM_MMIO_DEVICE_HH__
 
-#include "ACALSimDeviceComponent.hh"
+#include "sst/ACALSimDeviceComponent.hh"
 #include <queue>
 #include <sst/core/component.h>
 #include <sst/core/event.h>
 #include <sst/core/link.h>
 #include <sst/core/output.h>
+#include <sst/core/statapi/statbase.h>
 
 namespace ACALSim {
 namespace QEMUIntegration {
@@ -275,11 +276,11 @@ private:
 	SST::Link*  irq_link_;        ///< Link for interrupt signaling
 
 	// Statistics
-	SST::Statistic<uint64_t>* stat_mmio_reads_;
-	SST::Statistic<uint64_t>* stat_mmio_writes_;
-	SST::Statistic<uint64_t>* stat_ops_completed_;
-	SST::Statistic<uint64_t>* stat_interrupts_;
-	SST::Statistic<uint64_t>* stat_avg_latency_;
+	SST::Statistics::Statistic<uint64_t>* stat_mmio_reads_;
+	SST::Statistics::Statistic<uint64_t>* stat_mmio_writes_;
+	SST::Statistics::Statistic<uint64_t>* stat_ops_completed_;
+	SST::Statistics::Statistic<uint64_t>* stat_interrupts_;
+	SST::Statistics::Statistic<uint64_t>* stat_avg_latency_;
 
 	// Device configuration
 	uint64_t base_addr_;          ///< Base address

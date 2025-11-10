@@ -24,7 +24,7 @@ limitations under the License.
 
 ```
 
-Copyright (c) 2023-2024 Playlab/ACAL
+Copyright (c) 2023-2025 Playlab/ACAL
 
 Licensed to Taiwan High-Performance Computing Education Association (TWHPCEDU) for educational use under the Apache 2.0 license.
 
@@ -52,7 +52,8 @@ Playlab, a collaborative learning group founded by Dr. Wei-Fen Lin in 2012, has 
     - Launched the ACALSim project to build a high-performance computing simulation environment
     - Designed for teaching and open research purposes
     - Leveraged ACALSim to offer more advanced professional courses in high-performance computing
-
+- **Fall 2024: Working with Taiwan High Peformance Computing Education Association to Foster Young Talents**
+     
 ## About Taiwan High-Performance Computing Education Association
 
 The Taiwan High-Performance Computing Education Community is a grassroots initiative dedicated to making HPC education accessible to all and nurturing a new generation of HPC system designers. By fostering an open, collaborative, and inclusive environment, the community aims to:
@@ -64,6 +65,9 @@ The Taiwan High-Performance Computing Education Community is a grassroots initia
 - **Advance the HPC field**: Break down barriers between academia and industry to elevate the overall HPC landscape.
 
 The community's commitment to open education, shared growth, and collaboration is driving innovation and accelerating the advancement of HPC. By joining this initiative, individuals can contribute to and benefit from a collective effort to push the boundaries of HPC knowledge and application.
+
+## Acknoledgement
+We gratefully acknowledge the Industrial Technology Research Institute (ITRI) for their generous sponsorship and support of the ACALSim open source project. ITRI's commitment to advancing computer architecture research and their vision for open collaboration have been instrumental in making this simulation framework available to the broader research community. Their support enables researchers and developers worldwide to explore and innovate in AI accelerator and computer architecture design.
 
 ## Documentation
 
@@ -91,6 +95,9 @@ Welcome to visit our documentation [here](./docs/README.md).
 	- Maintainers:
 	    - Chia-Pao Chiang \<daniel100373@gmail.com\>
 	    - Yen-Po Chen \<yenpo@twhpcedu.tw\>
+
+## Collaboration with AI Tools
+The ACALSim project leverages advanced AI tools to enhance documentation quality and accelerate development workflows. We utilize Claude (Anthropic) and other AI assistants for generating comprehensive documentation, refining technical descriptions, and maintaining consistent coding standards across the project. These AI tools have been particularly valuable in documenting complex SST integration patterns, generating example configurations, and creating user guides that bridge the gap between theoretical computer architecture concepts and practical simulation implementation. This human-AI collaboration approach allows our team to focus on core architectural innovation while ensuring high-quality, accessible documentation for the research community.
 
 ## License
 

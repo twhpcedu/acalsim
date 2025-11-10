@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ACALSimComputeDeviceComponent.hh"
+#include "sst/ACALSimComputeDeviceComponent.hh"
 #include <cstdio>
 
 using namespace ACALSim::QEMUIntegration;

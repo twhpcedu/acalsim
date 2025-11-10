@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "ACALSimMMIODevice.hh"
+#include "sst/ACALSimMMIODevice.hh"
 
 using namespace ACALSim::QEMUIntegration;
 
