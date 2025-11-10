@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "../../include/HSA/HSAHostComponent.hh"
+#include "HSAHostComponent.hh"
 
 using namespace SST::ACALSim::HSA;
 
