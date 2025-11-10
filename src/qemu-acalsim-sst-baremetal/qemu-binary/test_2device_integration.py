@@ -15,8 +15,8 @@ qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
 qemu.addParams({
     "clock": "1GHz",
     "verbose": 2,
-    "binary_path": "../riscv-programs/multi_device_test.elf",
-    "qemu_path": "qemu-system-riscv32",
+    "binary_path": "/home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/multi_device_test.elf",
+    "qemu_path": "/home/user/qemu-build/qemu/build/qemu-system-riscv32",
     "socket_path": "/tmp/qemu-sst-mmio.sock",
     "num_devices": 2,
     "device0_base": "0x10200000",
