@@ -70,6 +70,14 @@ void uart_puthex(uint32_t val) {
     }
 }
 
+// Trap handler (required by start.S)
+void trap_handler_c(void) {
+    uart_puts("\n[TRAP] Exception occurred!\n");
+    while (1) {
+        asm volatile("wfi");
+    }
+}
+
 // Test functions
 
 void test_simple_write_read() {

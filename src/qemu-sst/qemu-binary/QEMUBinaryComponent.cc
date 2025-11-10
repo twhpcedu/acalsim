@@ -149,9 +149,12 @@ void QEMUBinaryComponent::handleDeviceResponse(SST::Event* ev) {
         return;
     }
 
-    uint64_t req_id = resp->req_id;
-    out_.verbose(CALL_INFO, 2, 0, "Received device response: req_id=%" PRIu64 " data=0x%" PRIx64 " success=%d\n",
-                 req_id, resp->data, resp->success);
+    uint64_t req_id = resp->getReqId();
+    uint32_t data = resp->getData();
+    bool success = resp->getSuccess();
+
+    out_.verbose(CALL_INFO, 2, 0, "Received device response: req_id=%" PRIu64 " data=0x%08x success=%d\n",
+                 req_id, data, success);
 
     // Find pending request
     auto it = pending_requests_.find(req_id);
@@ -161,15 +164,13 @@ void QEMUBinaryComponent::handleDeviceResponse(SST::Event* ev) {
         return;
     }
 
-    PendingMMIORequest& pending = it->second;
-
     // Send MMIO response back to QEMU
-    out_.verbose(CALL_INFO, 2, 0, "Sending MMIO response to QEMU: success=%d data=0x%" PRIx64 "\n",
-                 resp->success, resp->data);
-    sendMMIOResponse(resp->success, resp->data);
+    out_.verbose(CALL_INFO, 2, 0, "Sending MMIO response to QEMU: success=%d data=0x%08x\n",
+                 success, data);
+    sendMMIOResponse(success, data);
 
     // Update statistics
-    if (resp->success) {
+    if (success) {
         successful_transactions_++;
     } else {
         failed_transactions_++;
@@ -398,13 +399,15 @@ void QEMUBinaryComponent::sendMMIOResponse(bool success, uint64_t data) {
 
 void QEMUBinaryComponent::sendDeviceRequest(uint8_t type, uint64_t addr, uint64_t data, uint8_t size) {
     // Create MemoryTransactionEvent
-    TransactionType tx_type = (type == 0) ? TransactionType::READ : TransactionType::WRITE;
+    // Type: 0 = READ (LOAD in SST), 1 = WRITE (STORE in SST)
+    TransactionType tx_type = (type == 0) ? TransactionType::LOAD : TransactionType::STORE;
     uint64_t req_id = next_req_id_++;
 
-    auto* event = new MemoryTransactionEvent(tx_type, device_base_ + addr, static_cast<uint32_t>(data), req_id);
+    auto* event = new MemoryTransactionEvent(tx_type, device_base_ + addr, static_cast<uint32_t>(data),
+                                             static_cast<uint32_t>(size), req_id);
 
-    out_.verbose(CALL_INFO, 2, 0, "Sending device request: type=%d addr=0x%016" PRIx64 " data=0x%08x req_id=%" PRIu64 "\n",
-                 static_cast<int>(tx_type), device_base_ + addr, static_cast<uint32_t>(data), req_id);
+    out_.verbose(CALL_INFO, 2, 0, "Sending device request: type=%d addr=0x%016" PRIx64 " data=0x%08x size=%u req_id=%" PRIu64 "\n",
+                 static_cast<int>(tx_type), device_base_ + addr, static_cast<uint32_t>(data), size, req_id);
 
     // Store pending request
     PendingMMIORequest pending;
