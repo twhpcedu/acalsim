@@ -1,0 +1,40 @@
+{
+  "devices": [
+    {
+      "name": "echo_device",
+      "base_addr": "0x10200000",
+      "size": 4096,
+      "component": "acalsim.QEMUDevice",
+      "params": {
+        "echo_latency": 10
+      }
+    },
+    {
+      "name": "compute_device",
+      "base_addr": "0x10300000",
+      "size": 4096,
+      "component": "acalsim.ComputeDevice",
+      "params": {
+        "compute_latency": 100
+      }
+    },
+    {
+      "name": "echo_device2",
+      "base_addr": "0x10400000",
+      "size": 4096,
+      "component": "acalsim.QEMUDevice",
+      "params": {
+        "echo_latency": 5
+      }
+    },
+    {
+      "name": "compute_device2",
+      "base_addr": "0x10500000",
+      "size": 4096,
+      "component": "acalsim.ComputeDevice",
+      "params": {
+        "compute_latency": 50
+      }
+    }
+  ]
+}
