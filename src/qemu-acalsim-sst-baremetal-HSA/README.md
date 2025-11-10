@@ -33,29 +33,48 @@ This project demonstrates cycle-accurate hardware simulation by connecting QEMU 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     SST Simulation                          │
-│  ┌──────────────────┐           ┌──────────────────┐       │
-│  │ QEMUBinary       │  Events   │ ACALSim Device   │       │
-│  │ Component        │◄─────────►│ Component        │       │
-│  └────────┬─────────┘           └──────────────────┘       │
-│           │                                                  │
-│           │ Unix Socket (Binary MMIO Protocol)              │
-└───────────┼──────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            SST Simulation                                   │
+│                                                                             │
+│  ┌──────────────────┐          ┌──────────────────┐                        │
+│  │ QEMUBinary       │  MMIO    │ ACALSim Echo     │                        │
+│  │ Component        │◄────────►│ Device           │                        │
+│  │                  │  Events  │                  │                        │
+│  │                  │          └──────────────────┘                        │
+│  │                  │                                                       │
+│  │                  │  MMIO    ┌──────────────────┐                        │
+│  │                  │◄────────►│ ACALSim Compute  │                        │
+│  │                  │  Events  │ Device           │                        │
+│  │                  │          └──────────────────┘                        │
+│  │                  │                                                       │
+│  │                  │  MMIO    ┌──────────────────┐                        │
+│  │                  │◄────────►│ ACALSim MMIO     │                        │
+│  │                  │  Events  │ Device           │                        │
+│  │                  │          │ (with interrupts)│                        │
+│  │                  │ Interrupt│                  │                        │
+│  │                  │◄─────────│                  │                        │
+│  └────────┬─────────┘          └──────────────────┘                        │
+│           │                                                                 │
+│           │ Unix Socket (Binary MMIO Protocol)                             │
+└───────────┼─────────────────────────────────────────────────────────────────┘
             │
-            │ 24-byte MMIORequest
-            │ 20-byte MMIOResponse
+            │ 24-byte MMIORequest/MMIOResponse
             │
-┌───────────┼──────────────────────────────────────────────────┐
-│           ▼                                                   │
-│  ┌──────────────────┐           ┌──────────────────┐        │
-│  │ SST Device       │  MMIO     │ RISC-V CPU       │        │
-│  │ (sst-device.c)   │◄─────────►│                  │        │
-│  └──────────────────┘           └──────────────────┘        │
-│                                                               │
-│                    QEMU Process                              │
-│               (qemu-system-riscv32)                          │
-└───────────────────────────────────────────────────────────────┘
+┌───────────┼─────────────────────────────────────────────────────────────────┐
+│           ▼                                                                  │
+│  ┌──────────────────┐           ┌──────────────────┐                       │
+│  │ SST Device       │  MMIO     │ RISC-V CPU       │                       │
+│  │ (sst-device.c)   │◄─────────►│                  │                       │
+│  └──────────────────┘           └──────────────────┘                       │
+│                                                                              │
+│                    QEMU Process                                             │
+│               (qemu-system-riscv32)                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Communication Patterns:
+- MMIO Transactions: CPU load/store → MemoryTransactionEvent → Device
+- MMIO Responses: Device → MemoryResponseEvent → CPU
+- Interrupts: Device → InterruptEvent (ASSERT/DEASSERT) → CPU
 ```
 
 ### Binary MMIO Protocol
@@ -112,21 +131,44 @@ Manages QEMU subprocess and protocol translation:
 
 ### 4. SST Device Components (acalsim-device/)
 
+Multiple device examples demonstrating different communication patterns:
+
 #### Echo Device (ACALSimDeviceComponent)
 
-Simple echo device for testing:
+Simple echo device for testing basic MMIO:
 - **Base address**: 0x10200000
 - **Registers**: DATA_IN (0x00), DATA_OUT (0x04), STATUS (0x08), CONTROL (0x0C)
 - **Latency**: Configurable (default 10 cycles)
+- **Communication**: MMIO only
 
 #### Compute Device (ACALSimComputeDeviceComponent)
 
-Arithmetic accelerator device:
+Arithmetic accelerator with peer communication:
 - **Base address**: 0x10300000
 - **Operations**: ADD, SUB, MUL, DIV
 - **Registers**: OPERAND_A, OPERAND_B, OPERATION, RESULT, STATUS, CONTROL
 - **Peer communication**: PEER_DATA_OUT, PEER_DATA_IN
 - **Latency**: Configurable (default 100 cycles)
+- **Communication**: MMIO + SST peer links
+
+#### MMIO Device with Interrupts (ACALSimMMIODevice) **NEW!**
+
+Advanced MMIO device demonstrating interrupt-driven I/O:
+- **Base address**: 0x10001000 (configurable)
+- **Features**:
+  - DMA-like operations with source/dest/length
+  - Interrupt support (ASSERT/DEASSERT)
+  - Write-1-to-clear interrupt status
+  - Configurable operation latency
+- **Registers**: CTRL, STATUS, INT_STATUS, INT_ENABLE, SRC_ADDR, DST_ADDR, LENGTH, LATENCY, DATA_IN, DATA_OUT, CYCLE_COUNT
+- **Communication**: MMIO + Interrupts
+- **Documentation**: See [acalsim-device/README_MMIO_DEVICE.md](acalsim-device/README_MMIO_DEVICE.md) for complete guide including:
+  - Communication patterns (load/store + interrupts)
+  - Register map and access patterns
+  - Implementation examples
+  - Driver code (bare-metal C with ISR)
+  - SST configuration
+  - Best practices
 
 ## Quick Start
 
