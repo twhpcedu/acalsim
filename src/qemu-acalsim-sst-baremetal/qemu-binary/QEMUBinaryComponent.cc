@@ -106,6 +106,12 @@ QEMUBinaryComponent::QEMUBinaryComponent(SST::ComponentId_t id, SST::Params& par
             dev.name = params.find<std::string>(name_key, "device" + std::to_string(i));
             dev.num_requests = 0;
 
+            // Initialize socket fields (will be set up in launchQEMU)
+            dev.socket_path = "";
+            dev.server_fd = -1;
+            dev.client_fd = -1;
+            dev.socket_ready = false;
+
             // Configure port
             std::string port_name = "device_port_" + std::to_string(i);
             dev.link = configureLink(port_name,
@@ -136,11 +142,25 @@ QEMUBinaryComponent::QEMUBinaryComponent(SST::ComponentId_t id, SST::Params& par
 QEMUBinaryComponent::~QEMUBinaryComponent() {
     terminateQEMU();
 
+    // Close legacy single-device sockets
     if (client_fd_ >= 0) {
         close(client_fd_);
     }
     if (server_fd_ >= 0) {
         close(server_fd_);
+    }
+
+    // Close N-device sockets
+    for (auto& dev : devices_) {
+        if (dev.client_fd >= 0) {
+            close(dev.client_fd);
+        }
+        if (dev.server_fd >= 0) {
+            close(dev.server_fd);
+        }
+        if (!dev.socket_path.empty()) {
+            unlink(dev.socket_path.c_str());
+        }
     }
 }
 

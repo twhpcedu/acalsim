@@ -76,6 +76,12 @@ struct DeviceInfo {
     SST::Link* link;         // Link to device
     std::string name;        // Device name (for debugging)
     uint64_t num_requests;   // Statistics: requests routed to this device
+
+    // N-socket support: per-device socket connections
+    std::string socket_path; // Unix socket path (e.g., /tmp/qemu-sst-device0.sock)
+    int server_fd;           // Server socket file descriptor
+    int client_fd;           // Client connection file descriptor
+    bool socket_ready;       // True when client connected
 };
 
 /*
@@ -148,8 +154,15 @@ private:
 
     // Socket communication
     void setupSocket();
-    void handleMMIORequest();
-    void sendMMIOResponse(bool success, uint64_t data);
+    void handleMMIORequest();  // Legacy single-device mode
+    void handleMMIORequest(DeviceInfo* device);  // N-device mode
+    void sendMMIOResponse(bool success, uint64_t data);  // Legacy
+    void sendMMIOResponse(DeviceInfo* device, bool success, uint64_t data);  // N-device
+
+    // Per-device socket management (N-device mode)
+    void setupDeviceSocket(DeviceInfo* device, int index);
+    void acceptDeviceConnection(DeviceInfo* device);
+    void pollDeviceSockets();
 
     // SST device communication
     void sendDeviceRequest(uint8_t type, uint64_t addr, uint64_t data, uint8_t size);
