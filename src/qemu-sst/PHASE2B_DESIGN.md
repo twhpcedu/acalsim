@@ -1,5 +1,18 @@
 # Phase 2B: QEMU-SST Integration Design
 
+## Status
+
+**Phase 2B: COMPLETE** ✅
+
+- ✅ QEMURealComponent implemented with QEMU subprocess management
+- ✅ Unix socket communication working reliably (SST server, QEMU client)
+- ✅ SST protocol parsing functional
+- ✅ Bidirectional communication demonstrated
+- ✅ Event translation working (protocol ↔ MemoryTransactionEvent)
+- ✅ Device integration complete
+
+**Key Implementation:** Socket architecture uses SST as server (creates socket before fork) and QEMU as client (connects on startup), eliminating race conditions.
+
 ## Overview
 
 Phase 2B implements basic QEMU-SST integration using a **simplified protocol-based approach** over QEMU's serial interface. This avoids modifying QEMU while demonstrating the concept.
@@ -73,17 +86,32 @@ UART → RISC-V: "SST:OK:DEADBEEF\n"
 
 ### 1. QEMU Launch Configuration
 
+**Implementation Note:** The socket architecture was improved to eliminate race conditions.
+SST creates the server socket and listen() BEFORE forking QEMU, then QEMU connects as a client.
+
 ```cpp
 // QEMURealComponent launches QEMU with:
+// Step 1: Create server socket and bind/listen BEFORE fork
+int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+bind(server_fd, ...);
+listen(server_fd, 1);
+
+// Step 2: Fork QEMU process
+qemu_pid_ = fork();
+
+// Step 3: In child process, exec QEMU as CLIENT (not server)
 const char* qemu_args[] = {
     "qemu-system-riscv32",
     "-M", "virt",
     "-bios", "none",
     "-nographic",
     "-kernel", binary_path_.c_str(),
-    "-serial", "unix:/tmp/qemu-sst.sock,server",
+    "-serial", "unix:/tmp/qemu-sst.sock",  // CLIENT mode (no "server" flag)
     NULL
 };
+
+// Step 4: In parent, accept QEMU's connection with timeout
+serial_fd_ = accept(server_fd, NULL, NULL);
 ```
 
 ### 2. Serial Socket Communication
