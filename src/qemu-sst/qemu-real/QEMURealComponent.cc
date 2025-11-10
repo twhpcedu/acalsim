@@ -16,6 +16,7 @@
 
 #include "QEMURealComponent.hh"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/socket.h>
@@ -175,6 +176,7 @@ void QEMURealComponent::handleDeviceResponse(SST::Event* ev) {
     }
 
     // Send response to QEMU
+    out_.verbose(CALL_INFO, 2, 0, "Sending response to QEMU: %s", response.c_str());
     sendSerialResponse(response);
 
     // Remove from pending
@@ -197,16 +199,47 @@ void QEMURealComponent::launchQEMU() {
     // Remove existing socket
     unlink(socket_path_.c_str());
 
+    // Setup server socket FIRST (before forking)
+    // Create server socket
+    int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        out_.fatal(CALL_INFO, -1, "Error: Failed to create server socket\n");
+    }
+
+    // Bind to socket path
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
+
+    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(server_fd);
+        out_.fatal(CALL_INFO, -1, "Error: Failed to bind server socket: %s\n", strerror(errno));
+    }
+
+    // Listen for connections
+    if (listen(server_fd, 1) < 0) {
+        close(server_fd);
+        out_.fatal(CALL_INFO, -1, "Error: Failed to listen on socket: %s\n", strerror(errno));
+    }
+
+    out_.verbose(CALL_INFO, 1, 0, "Server socket listening at %s\n", socket_path_.c_str());
+
     // Fork QEMU process
     qemu_pid_ = fork();
 
     if (qemu_pid_ < 0) {
+        close(server_fd);
         out_.fatal(CALL_INFO, -1, "Error: Failed to fork QEMU process\n");
     }
 
     if (qemu_pid_ == 0) {
-        // Child process - exec QEMU
-        std::string serial_arg = "unix:" + socket_path_ + ",server,nowait";
+        // Child process - exec QEMU as client
+        // Close server socket in child
+        close(server_fd);
+
+        // QEMU will connect to SST's server socket
+        std::string serial_arg = "unix:" + socket_path_;
 
         const char* args[] = {
             qemu_path_.c_str(),
@@ -225,59 +258,51 @@ void QEMURealComponent::launchQEMU() {
         exit(1);
     }
 
-    // Parent process - wait for socket
+    // Parent process - accept connection from QEMU
     out_.verbose(CALL_INFO, 1, 0, "QEMU PID: %d\n", qemu_pid_);
+    out_.verbose(CALL_INFO, 1, 0, "Waiting for QEMU to connect...\n");
 
-    // Give QEMU time to start and create socket
-    sleep(1);
+    // Set socket to non-blocking for accept with timeout
+    int flags = fcntl(server_fd, F_GETFL, 0);
+    fcntl(server_fd, F_SETFL, flags | O_NONBLOCK);
 
-    // Setup serial connection
-    setupSerial();
+    // Wait for QEMU to connect (with timeout)
+    for (int i = 0; i < 50; i++) {
+        serial_fd_ = accept(server_fd, NULL, NULL);
+        if (serial_fd_ >= 0) {
+            // Connection accepted!
+            close(server_fd);
 
-    setState(QEMUState::RUNNING);
-}
+            // Set client socket to non-blocking
+            flags = fcntl(serial_fd_, F_GETFL, 0);
+            fcntl(serial_fd_, F_SETFL, flags | O_NONBLOCK);
 
-// Setup serial connection
-void QEMURealComponent::setupSerial() {
-    out_.verbose(CALL_INFO, 2, 0, "Setting up serial connection to %s\n", socket_path_.c_str());
-
-    // Create Unix domain socket
-    serial_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (serial_fd_ < 0) {
-        out_.fatal(CALL_INFO, -1, "Error: Failed to create socket\n");
-    }
-
-    // Set non-blocking
-    int flags = fcntl(serial_fd_, F_GETFL, 0);
-    fcntl(serial_fd_, F_SETFL, flags | O_NONBLOCK);
-
-    // Connect to QEMU's serial socket
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
-
-    // Retry connection a few times - wait for QEMU to create socket
-    for (int i = 0; i < 30; i++) {
-        // Check if socket file exists
-        if (access(socket_path_.c_str(), F_OK) != 0) {
-            out_.verbose(CALL_INFO, 3, 0, "Waiting for socket file to appear (attempt %d/30)...\n", i + 1);
-            usleep(200000);  // 200ms
-            continue;
-        }
-
-        if (connect(serial_fd_, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
             serial_ready_ = true;
-            out_.verbose(CALL_INFO, 1, 0, "Serial connection established\n");
+            out_.verbose(CALL_INFO, 1, 0, "QEMU connected to serial socket\n");
+            setState(QEMUState::RUNNING);
             return;
         }
 
-        // Connection failed, wait and retry
-        out_.verbose(CALL_INFO, 3, 0, "Connection attempt %d/30 failed, retrying...\n", i + 1);
+        // Check if error is EAGAIN/EWOULDBLOCK (no connection yet)
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            close(server_fd);
+            out_.fatal(CALL_INFO, -1, "Error: accept() failed: %s\n", strerror(errno));
+        }
+
+        // Wait and retry
+        out_.verbose(CALL_INFO, 3, 0, "Waiting for QEMU connection (attempt %d/50)...\n", i + 1);
         usleep(200000);  // 200ms
     }
 
-    out_.fatal(CALL_INFO, -1, "Error: Failed to connect to QEMU serial socket after 30 attempts\n");
+    close(server_fd);
+    out_.fatal(CALL_INFO, -1, "Error: QEMU failed to connect after 50 attempts (10 seconds)\n");
+}
+
+// Setup serial connection - now handled in launchQEMU()
+void QEMURealComponent::setupSerial() {
+    // Serial setup is now integrated into launchQEMU()
+    // This function kept for compatibility
+    out_.verbose(CALL_INFO, 2, 0, "setupSerial() called (socket already set up in launchQEMU)\n");
 }
 
 // Monitor QEMU

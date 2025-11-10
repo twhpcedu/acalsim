@@ -95,8 +95,8 @@ device.addParams({
     "clock":        "1GHz",
     "base_addr":    str(device_base),
     "size":         "4096",
-    "verbose":      "2",
-    "echo_latency": "10",  # 10 cycles
+    "verbose":      "1",  # Reduce verbosity for cleaner output
+    "echo_latency": "1",  # 1 cycle (minimal latency for testing)
 })
 
 # -----------------------------------------------------------------------------
