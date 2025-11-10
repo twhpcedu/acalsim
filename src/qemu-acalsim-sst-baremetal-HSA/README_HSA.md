@@ -76,21 +76,27 @@ This project extends the qemu-acalsim-sst-baremetal framework with HSA protocol 
 
 ## File Organization
 
-### Shared HSA Library (libs/HSA/)
+### Shared HSA Framework Components
 
-Located in the main project for reuse across multiple APPs:
+HSA components are part of the ACALSim framework and shared by all APPs via framework-level directories:
 
 ```
+# Framework-level shared sources (at project root: ../../..)
 libs/HSA/
 ├── HSAHostComponent.cc          # Host agent implementation
 ├── HSAComputeComponent.cc       # Compute agent implementation
-└── Makefile                      # Shared library build system
+└── Makefile                      # (For reference only)
 
 include/HSA/
 ├── HSAEvents.hh                  # HSA event type definitions
 ├── HSAHostComponent.hh           # Host component header
 └── HSAComputeComponent.hh        # Compute component header
 ```
+
+**Build Integration**: Each APP's `acalsim-device/Makefile` references these shared framework sources and compiles them into `libacalsim.so` alongside APP-specific device components. This ensures:
+- HSA code is maintained in one shared location
+- All APPs can use the same HSA implementation
+- No separate HSA library needed - everything in libacalsim.so
 
 ### APP-Specific Files (src/qemu-acalsim-sst-baremetal-HSA/)
 
@@ -209,23 +215,27 @@ Executes kernels received via AQL packets.
 
 ## Build Instructions
 
-### 1. Build Shared HSA Library
+### 1. Build libacalsim.so with HSA Components
+
+HSA components are automatically included when building the device library:
 
 ```bash
-cd libs/HSA
+cd acalsim-device
 make clean && make && make install
 ```
 
-This installs `libacalsim_hsa.so` to your SST library directory.
+This builds `libacalsim.so` containing all device components (QEMUDevice, ComputeDevice, HSAHost, HSACompute) using shared framework sources from `../../libs/HSA/`.
 
 ### 2. Verify Installation
 
 ```bash
-sst-info acalsim | grep HSA
+sst-info acalsim
 ```
 
-Expected output:
+Expected output showing all components including HSA:
 ```
+Component: QEMUDevice
+Component: ComputeDevice
 Component: HSAHost
 Component: HSACompute
 ```
