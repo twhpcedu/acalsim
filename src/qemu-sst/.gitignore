@@ -3,6 +3,11 @@
 *.so
 *.a
 
+# RISC-V binaries
+*.elf
+*.bin
+*.dump
+
 # Editor files
 *.swp
 *.swo
