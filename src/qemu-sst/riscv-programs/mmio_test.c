@@ -23,8 +23,8 @@
 
 #include <stdint.h>
 
-// SST device MMIO registers (at 0x20000000)
-#define SST_DEVICE_BASE  0x20000000
+// SST device MMIO registers (at 0x10200000)
+#define SST_DEVICE_BASE  0x10200000
 
 // Register offsets
 #define SST_DATA_IN_OFFSET      0x00

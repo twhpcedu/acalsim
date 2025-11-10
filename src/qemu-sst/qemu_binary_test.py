@@ -48,13 +48,13 @@ binary_path = os.environ.get("RISCV_BINARY",
     "/home/user/projects/acalsim/src/qemu-sst/riscv-programs/mmio_test.elf")
 
 # QEMU path
-qemu_path = os.environ.get("QEMU_PATH", "qemu-system-riscv32")
+qemu_path = os.environ.get("QEMU_PATH", "/home/user/qemu-build/install/bin/qemu-system-riscv32")
 
 # Unix socket path for MMIO
 socket_path = "/tmp/qemu-sst-mmio.sock"
 
 # Device base address (should match RISC-V program: SST_DEVICE_BASE in mmio_test.c)
-device_base = 0x20000000
+device_base = 0x10200000
 
 # Simulation time
 sim_time_us = 1000  # 1ms should be enough for test
