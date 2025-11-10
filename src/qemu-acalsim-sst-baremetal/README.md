@@ -702,6 +702,7 @@ See [DEMO_EXAMPLE.md](DEMO_EXAMPLE.md) for complete details.
 - **[DEMO_EXAMPLE.md](DEMO_EXAMPLE.md)** - Concrete working examples for homogeneous and heterogeneous device modeling with complete RISC-V programs
 
 ### Additional Resources
+- **[MPI_SETUP_GUIDE.md](MPI_SETUP_GUIDE.md)** - Comprehensive guide for setting up and running distributed simulations across multiple servers using MPI
 - **[DOCKER.md](DOCKER.md)** - Docker containerization instructions
 - **[docs/archive/](docs/archive/)** - Historical development documents
 
