@@ -20,14 +20,52 @@ This directory contains the ACALSim device component for the QEMU-ACALSim distri
 
 ## Overview
 
-The ACALSimDeviceComponent is an SST component that models a simple memory-mapped echo device. It receives load/store transaction requests from the QEMU component via SST Links and processes them in a cycle-accurate manner.
+This directory contains multiple ACALSim device components demonstrating different communication patterns with QEMU:
 
-## Component Features
+1. **ACALSimDeviceComponent** - Simple echo device
+2. **ACALSimComputeDeviceComponent** - Compute accelerator
+3. **ACALSimMMIODevice** - MMIO device with interrupt support (NEW!)
 
-- **Memory-Mapped Interface**: Responds to load/store requests for a 4KB device region
-- **Cycle-Accurate Timing**: Echo operations take 10 cycles (configurable)
-- **SST Event-Driven**: Uses SST's event system for inter-process communication
-- **Statistics Tracking**: Counts total loads, stores, and echo operations
+## Available Device Components
+
+### 1. ACALSimDeviceComponent (Echo Device)
+
+Simple memory-mapped echo device for testing basic MMIO functionality.
+
+**Features**:
+- Memory-Mapped Interface (4KB region)
+- Cycle-Accurate Timing (10 cycles default)
+- SST Event-Driven Communication
+- Statistics Tracking
+
+### 2. ACALSimComputeDeviceComponent
+
+Compute accelerator modeling realistic computation workloads.
+
+**Features**:
+- Configurable compute latency
+- Multiple operation modes
+- Resource modeling
+
+### 3. ACALSimMMIODevice (NEW!)
+
+Advanced MMIO device demonstrating interrupt-driven I/O.
+
+**Features**:
+- **MMIO Interface**: Load/store for register access
+- **Interrupt Support**: InterruptEvent for async notification
+- **DMA-like Operations**: Configurable source/dest/length
+- **Cycle-Accurate Timing**: Realistic operation latencies
+- **Full Register Set**: CTRL, STATUS, INT_STATUS, INT_ENABLE, etc.
+- **Statistics**: MMIO ops, interrupts, latencies
+
+**See [README_MMIO_DEVICE.md](README_MMIO_DEVICE.md) for complete documentation including:**
+- Communication patterns (MMIO + interrupts)
+- Register map and access patterns
+- Implementation examples
+- Driver code (bare-metal C)
+- SST configuration
+- Best practices
 
 ## Device Register Map
 

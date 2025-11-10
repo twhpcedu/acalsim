@@ -34,8 +34,8 @@ INCLUDES = -I$(HSA_INCLUDE_DIR)
 COMPONENT_NAME = libacalsim.so
 
 # Local device sources
-LOCAL_SOURCES = ACALSimDeviceComponent.cc ACALSimComputeDeviceComponent.cc
-LOCAL_HEADERS = ACALSimDeviceComponent.hh ACALSimComputeDeviceComponent.hh
+LOCAL_SOURCES = ACALSimDeviceComponent.cc ACALSimComputeDeviceComponent.cc ACALSimMMIODevice.cc
+LOCAL_HEADERS = ACALSimDeviceComponent.hh ACALSimComputeDeviceComponent.hh ACALSimMMIODevice.hh
 
 # Shared HSA framework sources
 HSA_SOURCES = $(HSA_SRC_DIR)/HSAHostComponent.cc $(HSA_SRC_DIR)/HSAComputeComponent.cc
@@ -72,6 +72,7 @@ install: $(COMPONENT_NAME)
 	@echo "You can now use these components in SST:"
 	@echo "  - sst.Component(name, \"acalsim.QEMUDevice\")      # Echo device"
 	@echo "  - sst.Component(name, \"acalsim.ComputeDevice\")  # Compute device"
+	@echo "  - sst.Component(name, \"acalsim.MMIODevice\")     # MMIO device with interrupts"
 	@echo "  - sst.Component(name, \"acalsim.HSAHost\")        # HSA host agent"
 	@echo "  - sst.Component(name, \"acalsim.HSACompute\")     # HSA compute agent"
 
