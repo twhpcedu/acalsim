@@ -291,23 +291,48 @@ void QEMUBinaryComponent::launchQEMU() {
         // Close server socket in child
         close(server_fd_);
 
-        // QEMU will connect to SST's server socket via a custom device parameter
-        // The device loads at runtime and connects to the socket
-        // For now, we launch QEMU and will implement the device connection separately
+        // Build QEMU command line arguments dynamically
+        std::vector<const char*> args;
+        args.push_back(qemu_path_.c_str());
+        args.push_back("-M");
+        args.push_back("virt");
+        args.push_back("-bios");
+        args.push_back("none");
+        args.push_back("-nographic");
+        args.push_back("-kernel");
+        args.push_back(binary_path_.c_str());
 
-        const char* args[] = {
-            qemu_path_.c_str(),
-            "-M", "virt",
-            "-bios", "none",
-            "-nographic",
-            "-kernel", binary_path_.c_str(),
-            // TODO: Add -device sst-device,socket=<path> once QEMU device is ready
-            NULL
-        };
+        // Add SST devices if in multi-device mode
+        std::vector<std::string> device_args;
+        if (use_multi_device_) {
+            for (size_t i = 0; i < devices_.size(); i++) {
+                // For now, all devices connect to same socket (single connection)
+                // Future: implement N socket servers for true N-device support
+                char addr_buf[32];
+                snprintf(addr_buf, sizeof(addr_buf), "0x%lx", devices_[i].base_addr);
+                std::string dev_arg = "sst-device,socket=" + socket_path_ +
+                                     ",base_address=" + std::string(addr_buf);
+                device_args.push_back(dev_arg);
+                args.push_back("-device");
+                args.push_back(device_args.back().c_str());
+            }
+        } else if (device_link_) {
+            // Legacy single device mode
+            char addr_buf[32];
+            snprintf(addr_buf, sizeof(addr_buf), "0x%lx", device_base_);
+            std::string dev_arg = "sst-device,socket=" + socket_path_ +
+                                 ",base_address=" + std::string(addr_buf);
+            device_args.push_back(dev_arg);
+            args.push_back("-device");
+            args.push_back(device_args.back().c_str());
+        }
 
-        out_.verbose(CALL_INFO, 1, 0, "Child: Executing QEMU\n");
+        args.push_back(NULL);
 
-        execvp(qemu_path_.c_str(), const_cast<char* const*>(args));
+        out_.verbose(CALL_INFO, 1, 0, "Child: Executing QEMU with %zu devices\n",
+                     use_multi_device_ ? devices_.size() : 1);
+
+        execvp(qemu_path_.c_str(), const_cast<char* const*>(args.data()));
 
         // If exec fails
         fprintf(stderr, "Failed to exec QEMU: %s\n", strerror(errno));

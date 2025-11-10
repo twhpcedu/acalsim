@@ -86,6 +86,9 @@ typedef struct {
     char *socket_path;
     bool connected;
 
+    // Device base address (for N-device routing)
+    uint64_t base_address;
+
     // Device registers
     uint32_t data_in;
     uint32_t data_out;
@@ -147,7 +150,7 @@ static uint64_t sst_device_read(void *opaque, hwaddr addr, unsigned size)
                 .type = 0,           // READ
                 .size = size,
                 .reserved = 0,
-                .addr = addr,
+                .addr = s->base_address + addr,  // Send global address
                 .data = 0
             };
             struct MMIOResponse resp;
@@ -229,7 +232,7 @@ static void sst_device_write(void *opaque, hwaddr addr,
                     .type = 1,           // WRITE
                     .size = 4,
                     .reserved = 0,
-                    .addr = SST_DATA_IN_OFFSET,
+                    .addr = s->base_address + SST_DATA_IN_OFFSET,  // Send global address
                     .data = s->data_in
                 };
                 struct MMIOResponse resp;
@@ -274,7 +277,8 @@ static void sst_device_realize(DeviceState *dev, Error **errp)
     SSTDeviceState *s = SST_DEVICE(dev);
     struct sockaddr_un addr;
 
-    qemu_log("SST Device: Initializing with socket: %s\n", s->socket_path);
+    qemu_log("SST Device: Initializing with socket: %s, base_address: 0x%016lx\n",
+             s->socket_path, s->base_address);
 
     // Create MMIO region
     memory_region_init_io(&s->iomem, OBJECT(s), &sst_device_ops, s,
@@ -341,6 +345,7 @@ static void sst_device_unrealize(DeviceState *dev)
  */
 static Property sst_device_properties[] = {
     DEFINE_PROP_STRING("socket", SSTDeviceState, socket_path),
+    DEFINE_PROP_UINT64("base_address", SSTDeviceState, base_address, 0x10200000),
     DEFINE_PROP_END_OF_LIST(),
 };
 
