@@ -76,18 +76,20 @@ This project extends the qemu-acalsim-sst-baremetal framework with HSA protocol 
 
 ## File Organization
 
-### HSA Components (Integrated into libacalsim.so)
+### Shared HSA Library (libs/HSA/)
 
-The HSA components are integrated into the main libacalsim.so library alongside other device components:
+Located in the main project for reuse across multiple APPs:
 
 ```
-acalsim-device/
-├── ACALSimDeviceComponent.cc/hh      # Echo device
-├── ACALSimComputeDeviceComponent.cc/hh  # Compute device
-├── HSAEvents.hh                       # HSA event type definitions
-├── HSAHostComponent.cc/hh             # HSA host agent
-├── HSAComputeComponent.cc/hh          # HSA compute agent
-└── Makefile                           # Builds libacalsim.so
+libs/HSA/
+├── HSAHostComponent.cc          # Host agent implementation
+├── HSAComputeComponent.cc       # Compute agent implementation
+└── Makefile                      # Shared library build system
+
+include/HSA/
+├── HSAEvents.hh                  # HSA event type definitions
+├── HSAHostComponent.hh           # Host component header
+└── HSAComputeComponent.hh        # Compute component header
 ```
 
 ### APP-Specific Files (src/qemu-acalsim-sst-baremetal-HSA/)
@@ -207,25 +209,23 @@ Executes kernels received via AQL packets.
 
 ## Build Instructions
 
-### 1. Build libacalsim.so with HSA Components
+### 1. Build Shared HSA Library
 
 ```bash
-cd acalsim-device
+cd libs/HSA
 make clean && make && make install
 ```
 
-This builds and installs `libacalsim.so` containing all device components including HSA.
+This installs `libacalsim_hsa.so` to your SST library directory.
 
 ### 2. Verify Installation
 
 ```bash
-sst-info acalsim
+sst-info acalsim | grep HSA
 ```
 
 Expected output:
 ```
-Component: QEMUDevice
-Component: ComputeDevice
 Component: HSAHost
 Component: HSACompute
 ```
