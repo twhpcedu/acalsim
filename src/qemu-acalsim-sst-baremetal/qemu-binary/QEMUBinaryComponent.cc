@@ -40,6 +40,8 @@ QEMUBinaryComponent::QEMUBinaryComponent(SST::ComponentId_t id, SST::Params& par
     , client_fd_(-1)
     , socket_ready_(false)
     , device_link_(nullptr)
+    , use_multi_device_(false)
+    , num_devices_(1)
     , next_req_id_(1)
     , total_reads_(0)
     , total_writes_(0)
@@ -66,22 +68,66 @@ QEMUBinaryComponent::QEMUBinaryComponent(SST::ComponentId_t id, SST::Params& par
         out_.fatal(CALL_INFO, -1, "Error: binary_path parameter is required\n");
     }
 
+    // Check for N-device mode
+    num_devices_ = params.find<int>("num_devices", 1);
+    use_multi_device_ = (num_devices_ > 1);
+
     out_.verbose(CALL_INFO, 1, 0, "Configuration:\n");
     out_.verbose(CALL_INFO, 1, 0, "  Binary:      %s\n", binary_path_.c_str());
     out_.verbose(CALL_INFO, 1, 0, "  QEMU:        %s\n", qemu_path_.c_str());
     out_.verbose(CALL_INFO, 1, 0, "  Socket:      %s\n", socket_path_.c_str());
-    out_.verbose(CALL_INFO, 1, 0, "  Device base: 0x%016" PRIx64 "\n", device_base_);
+
+    if (use_multi_device_) {
+        out_.verbose(CALL_INFO, 1, 0, "  Mode:        N-device (%d devices)\n", num_devices_);
+    } else {
+        out_.verbose(CALL_INFO, 1, 0, "  Mode:        Single device (legacy)\n");
+        out_.verbose(CALL_INFO, 1, 0, "  Device base: 0x%016" PRIx64 "\n", device_base_);
+    }
 
     // Register clock
     std::string clock_freq = params.find<std::string>("clock", "1GHz");
     tc_ = registerClock(clock_freq, new SST::Clock::Handler<QEMUBinaryComponent>(this, &QEMUBinaryComponent::clockTick));
 
-    // Configure device link
-    device_link_ = configureLink("device_port",
-                                 new SST::Event::Handler<QEMUBinaryComponent>(this, &QEMUBinaryComponent::handleDeviceResponse));
+    if (use_multi_device_) {
+        // N-device mode: Configure multiple device ports
+        out_.verbose(CALL_INFO, 1, 0, "Configuring %d device ports:\n", num_devices_);
 
-    if (!device_link_) {
-        out_.fatal(CALL_INFO, -1, "Error: Failed to configure device_port link\n");
+        for (int i = 0; i < num_devices_; i++) {
+            DeviceInfo dev;
+
+            // Get device parameters
+            std::string base_key = "device" + std::to_string(i) + "_base";
+            std::string size_key = "device" + std::to_string(i) + "_size";
+            std::string name_key = "device" + std::to_string(i) + "_name";
+
+            std::string base_str = params.find<std::string>(base_key, "0x10000000");
+            dev.base_addr = std::stoull(base_str, nullptr, 16);
+            dev.size = params.find<uint64_t>(size_key, 4096);
+            dev.name = params.find<std::string>(name_key, "device" + std::to_string(i));
+            dev.num_requests = 0;
+
+            // Configure port
+            std::string port_name = "device_port_" + std::to_string(i);
+            dev.link = configureLink(port_name,
+                new SST::Event::Handler<QEMUBinaryComponent>(this, &QEMUBinaryComponent::handleDeviceResponse));
+
+            if (!dev.link) {
+                out_.fatal(CALL_INFO, -1, "Error: Failed to configure %s\n", port_name.c_str());
+            }
+
+            devices_.push_back(dev);
+
+            out_.verbose(CALL_INFO, 1, 0, "  Device %d (%s): [0x%016" PRIx64 ", 0x%016" PRIx64 ")\n",
+                        i, dev.name.c_str(), dev.base_addr, dev.base_addr + dev.size);
+        }
+    } else {
+        // Legacy single device mode: Configure single device_port
+        device_link_ = configureLink("device_port",
+                                     new SST::Event::Handler<QEMUBinaryComponent>(this, &QEMUBinaryComponent::handleDeviceResponse));
+
+        if (!device_link_) {
+            out_.fatal(CALL_INFO, -1, "Error: Failed to configure device_port link\n");
+        }
     }
 
     out_.verbose(CALL_INFO, 1, 0, "Initialization complete\n");
@@ -113,6 +159,18 @@ void QEMUBinaryComponent::finish() {
     out_.verbose(CALL_INFO, 1, 0, "  Total bytes:        %" PRIu64 "\n", total_bytes_);
     out_.verbose(CALL_INFO, 1, 0, "  Successful:         %" PRIu64 "\n", successful_transactions_);
     out_.verbose(CALL_INFO, 1, 0, "  Failed:             %" PRIu64 "\n", failed_transactions_);
+
+    // Print per-device statistics in multi-device mode
+    if (use_multi_device_) {
+        out_.verbose(CALL_INFO, 1, 0, "\n=== Per-Device Statistics ===\n");
+        for (size_t i = 0; i < devices_.size(); i++) {
+            const DeviceInfo& dev = devices_[i];
+            out_.verbose(CALL_INFO, 1, 0, "  Device %zu (%s):\n", i, dev.name.c_str());
+            out_.verbose(CALL_INFO, 1, 0, "    Base address:  0x%016" PRIx64 "\n", dev.base_addr);
+            out_.verbose(CALL_INFO, 1, 0, "    Size:          %" PRIu64 " bytes\n", dev.size);
+            out_.verbose(CALL_INFO, 1, 0, "    Requests:      %" PRIu64 "\n", dev.num_requests);
+        }
+    }
 
     terminateQEMU();
 }
@@ -398,16 +456,60 @@ void QEMUBinaryComponent::sendMMIOResponse(bool success, uint64_t data) {
 }
 
 void QEMUBinaryComponent::sendDeviceRequest(uint8_t type, uint64_t addr, uint64_t data, uint8_t size) {
-    // Create MemoryTransactionEvent
-    // Type: 0 = READ (LOAD in SST), 1 = WRITE (STORE in SST)
+    if (use_multi_device_) {
+        // N-device mode: Route to correct device based on address
+        DeviceInfo* device = findDeviceForAddress(addr);
+        if (device) {
+            routeToDevice(device, type, addr, data, size);
+        } else {
+            // No device found for this address - send error response
+            out_.verbose(CALL_INFO, 1, 0, "ERROR: No device mapped at address 0x%016" PRIx64 "\n", addr);
+            sendMMIOResponse(false, 0);  // Send error response to QEMU
+        }
+    } else {
+        // Legacy single device mode
+        TransactionType tx_type = (type == 0) ? TransactionType::LOAD : TransactionType::STORE;
+        uint64_t req_id = next_req_id_++;
+
+        auto* event = new MemoryTransactionEvent(tx_type, device_base_ + addr, static_cast<uint32_t>(data),
+                                                 static_cast<uint32_t>(size), req_id);
+
+        out_.verbose(CALL_INFO, 2, 0, "Sending device request: type=%d addr=0x%016" PRIx64 " data=0x%08x size=%u req_id=%" PRIu64 "\n",
+                     static_cast<int>(tx_type), device_base_ + addr, static_cast<uint32_t>(data), size, req_id);
+
+        // Store pending request
+        PendingMMIORequest pending;
+        pending.request.type = type;
+        pending.request.size = size;
+        pending.request.addr = addr;
+        pending.request.data = data;
+        pending.sst_req_id = req_id;
+
+        pending_requests_[req_id] = pending;
+
+        // Send to device
+        device_link_->send(event);
+    }
+}
+
+DeviceInfo* QEMUBinaryComponent::findDeviceForAddress(uint64_t address) {
+    for (auto& dev : devices_) {
+        if (address >= dev.base_addr && address < dev.base_addr + dev.size) {
+            return &dev;
+        }
+    }
+    return nullptr;
+}
+
+void QEMUBinaryComponent::routeToDevice(DeviceInfo* device, uint8_t type, uint64_t addr, uint64_t data, uint8_t size) {
     TransactionType tx_type = (type == 0) ? TransactionType::LOAD : TransactionType::STORE;
     uint64_t req_id = next_req_id_++;
 
-    auto* event = new MemoryTransactionEvent(tx_type, device_base_ + addr, static_cast<uint32_t>(data),
+    auto* event = new MemoryTransactionEvent(tx_type, addr, static_cast<uint32_t>(data),
                                              static_cast<uint32_t>(size), req_id);
 
-    out_.verbose(CALL_INFO, 2, 0, "Sending device request: type=%d addr=0x%016" PRIx64 " data=0x%08x size=%u req_id=%" PRIu64 "\n",
-                 static_cast<int>(tx_type), device_base_ + addr, static_cast<uint32_t>(data), size, req_id);
+    out_.verbose(CALL_INFO, 2, 0, "Routing to %s: type=%d addr=0x%016" PRIx64 " data=0x%08x size=%u req_id=%" PRIu64 "\n",
+                 device->name.c_str(), static_cast<int>(tx_type), addr, static_cast<uint32_t>(data), size, req_id);
 
     // Store pending request
     PendingMMIORequest pending;
@@ -416,11 +518,19 @@ void QEMUBinaryComponent::sendDeviceRequest(uint8_t type, uint64_t addr, uint64_
     pending.request.addr = addr;
     pending.request.data = data;
     pending.sst_req_id = req_id;
-
     pending_requests_[req_id] = pending;
 
+    // Update statistics
+    device->num_requests++;
+    if (type == 0) {
+        total_reads_++;
+    } else {
+        total_writes_++;
+    }
+    total_bytes_ += size;
+
     // Send to device
-    device_link_->send(event);
+    device->link->send(event);
 }
 
 void QEMUBinaryComponent::terminateQEMU() {
