@@ -30,7 +30,7 @@ ASFLAGS = -march=$(ARCH) -mabi=$(ABI)
 LDFLAGS = -T linker.ld -nostdlib
 
 # Targets
-all: simple_test.elf simple_test.bin simple_test.dump
+all: simple_test.elf simple_test.bin simple_test.dump sst_device_test.elf sst_device_test.bin sst_device_test.dump
 
 simple_test.elf: start.o simple_test.o linker.ld
 	$(CC) $(CFLAGS) $(LDFLAGS) start.o simple_test.o -o $@
@@ -47,6 +47,22 @@ start.o: start.S
 simple_test.o: simple_test.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# SST device test
+sst_device_test.elf: start.o sst_device_test.o sst_device.o linker.ld
+	$(CC) $(CFLAGS) $(LDFLAGS) start.o sst_device_test.o sst_device.o -o $@
+
+sst_device_test.bin: sst_device_test.elf
+	$(OBJCOPY) -O binary $< $@
+
+sst_device_test.dump: sst_device_test.elf
+	$(OBJDUMP) -d $< > $@
+
+sst_device_test.o: sst_device_test.c sst_device.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sst_device.o: sst_device.c sst_device.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
 	rm -f *.o *.elf *.bin *.dump
 
@@ -56,6 +72,12 @@ test: simple_test.elf
 	@echo "Press Ctrl-A then X to exit QEMU"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel simple_test.elf
 
+# Test SST device program with QEMU
+test-sst: sst_device_test.elf
+	@echo "Running SST device test program in QEMU..."
+	@echo "Press Ctrl-A then X to exit QEMU"
+	qemu-system-riscv32 -M virt -bios none -nographic -kernel sst_device_test.elf
+
 # Debug with QEMU
 debug: simple_test.elf
 	@echo "Starting QEMU in debug mode..."
@@ -63,4 +85,4 @@ debug: simple_test.elf
 	@echo "Then run: target remote localhost:1234"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel simple_test.elf -s -S
 
-.PHONY: all clean test debug
+.PHONY: all clean test test-sst debug
