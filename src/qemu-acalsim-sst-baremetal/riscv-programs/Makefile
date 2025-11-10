@@ -30,7 +30,11 @@ ASFLAGS = -march=$(ARCH) -mabi=$(ABI)
 LDFLAGS = -T linker.ld -nostdlib
 
 # Targets
-all: simple_test.elf simple_test.bin simple_test.dump sst_device_test.elf sst_device_test.bin sst_device_test.dump mmio_test.elf mmio_test.bin mmio_test.dump
+# Old tests use start.S, new tests use crt0.S
+all: simple_test.elf simple_test.bin simple_test.dump \
+     sst_device_test.elf sst_device_test.bin sst_device_test.dump \
+     mmio_test.elf mmio_test.bin mmio_test.dump \
+     mmio_test_main.elf mmio_test_main.bin mmio_test_main.dump
 
 simple_test.elf: start.o simple_test.o linker.ld
 	$(CC) $(CFLAGS) $(LDFLAGS) start.o simple_test.o -o $@
@@ -76,6 +80,22 @@ mmio_test.dump: mmio_test.elf
 mmio_test.o: mmio_test.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# MMIO test with main() and crt0.S
+mmio_test_main.elf: crt0.o mmio_test_main.o linker.ld
+	$(CC) $(CFLAGS) $(LDFLAGS) crt0.o mmio_test_main.o -o $@
+
+mmio_test_main.bin: mmio_test_main.elf
+	$(OBJCOPY) -O binary $< $@
+
+mmio_test_main.dump: mmio_test_main.elf
+	$(OBJDUMP) -d $< > $@
+
+mmio_test_main.o: mmio_test_main.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+crt0.o: crt0.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
 	rm -f *.o *.elf *.bin *.dump
 
@@ -97,6 +117,12 @@ test-mmio: mmio_test.elf
 	@echo "Press Ctrl-A then X to exit QEMU"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel mmio_test.elf
 
+# Test MMIO program with main() and crt0.S
+test-main: mmio_test_main.elf
+	@echo "Running MMIO test with main() and crt0.S..."
+	@echo "Press Ctrl-A then X to exit QEMU"
+	qemu-system-riscv32 -M virt -bios none -nographic -kernel mmio_test_main.elf
+
 # Debug with QEMU
 debug: simple_test.elf
 	@echo "Starting QEMU in debug mode..."
@@ -104,4 +130,4 @@ debug: simple_test.elf
 	@echo "Then run: target remote localhost:1234"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel simple_test.elf -s -S
 
-.PHONY: all clean test test-sst test-mmio debug
+.PHONY: all clean test test-sst test-mmio test-main debug
