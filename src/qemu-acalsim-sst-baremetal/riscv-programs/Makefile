@@ -135,8 +135,10 @@ test-mmio: mmio_test.elf
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel mmio_test.elf
 
 # Test MMIO program with main() and crt0.S
+# Note: This test requires custom QEMU with SST device OR SST simulation
 test-main: mmio_test_main.elf
 	@echo "Running MMIO test with main() and crt0.S..."
+	@echo "Note: Requires custom QEMU or will timeout/trap"
 	@echo "Press Ctrl-A then X to exit QEMU"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel mmio_test_main.elf
 
