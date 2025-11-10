@@ -1,1518 +1,1604 @@
-# QEMU-ACALSim-SST Developer Guide
+# QEMU-AcalSim-SST Baremetal Developer Guide
 
-Complete guide for developers building the QEMU-SST integration framework from scratch.
+**Target Audience**: Developers who want to understand the internal architecture, extend the system, or build similar simulators.
+
+**Prerequisites**:
+- Understanding of SST simulator framework
+- C++ development experience
+- Familiarity with QEMU internals
+- Knowledge of RISC-V architecture
+- Unix socket programming experience
+
+---
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Design Concepts](#design-concepts)
-3. [Development Phases](#development-phases)
-4. [Step-by-Step Development](#step-by-step-development)
-5. [Protocol Design](#protocol-design)
-6. [Integration Points](#integration-points)
-7. [Advanced Topics](#advanced-topics)
-8. [Best Practices](#best-practices)
+1. [System Architecture](#system-architecture)
+2. [Building from Scratch](#building-from-scratch)
+3. [Component Design Patterns](#component-design-patterns)
+4. [N-Device Architecture](#n-device-architecture)
+5. [SST Python Configuration Customization](#sst-python-configuration-customization)
+6. [Device Development Guide](#device-development-guide)
+7. [QEMU Integration Details](#qemu-integration-details)
+8. [Debugging and Profiling](#debugging-and-profiling)
+9. [Performance Optimization](#performance-optimization)
+10. [Advanced Topics](#advanced-topics)
 
 ---
 
-## Architecture Overview
+## System Architecture
 
-### System Components
-
-The QEMU-SST integration consists of four major components:
+### Three-Layer Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     SST Simulation                          │
-│  ┌──────────────────┐           ┌──────────────────┐       │
-│  │ QEMUBinary       │  Events   │ ACALSim Device   │       │
-│  │ Component        │◄─────────►│ Component        │       │
-│  └────────┬─────────┘           └──────────────────┘       │
-│           │                                                  │
-│           │ Unix Socket                                      │
-└───────────┼──────────────────────────────────────────────────┘
-            │
-            │ Binary MMIO Protocol
-            │
-┌───────────┼──────────────────────────────────────────────────┐
-│           ▼                                                   │
-│  ┌──────────────────┐           ┌──────────────────┐        │
-│  │ SST Device       │  MMIO     │ RISC-V CPU       │        │
-│  │ (sst-device.c)   │◄─────────►│                  │        │
-│  └──────────────────┘           └──────────────────┘        │
-│                                                               │
-│                    QEMU Process                              │
-└──────────────────────────────────────────────────────────────┘
+│  Layer 3: RISC-V Baremetal Application                      │
+│  - Compiled ELF binary                                       │
+│  - Runs inside QEMU virtual machine                         │
+│  - Accesses devices via MMIO                                │
+└───────────────┬─────────────────────────────────────────────┘
+                │ MMIO Requests (global addresses)
+                ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 2: QEMU Virtual Machine                              │
+│  - QEMU RISC-V system emulator                              │
+│  - sst-device: Custom QEMU device (SysBusDevice)            │
+│  - Unix socket communication with SST                       │
+│  - N-device support via environment variables               │
+└───────────────┬─────────────────────────────────────────────┘
+                │ Binary Protocol (MMIORequest/MMIOResponse)
+                ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 1: SST Simulation Framework                          │
+│  - QEMUBinaryComponent: Socket server + QEMU launcher       │
+│  - Device Components: Simulation models                     │
+│  - SST Links: Inter-component communication (MPI-capable)   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+### N-Device Communication Flow
 
-**1. RISC-V Firmware (riscv-programs/)**
-- Initializes CPU and memory
-- Provides C runtime environment
-- Performs MMIO operations to communicate with SST
-- Reports test results via UART
+**Complete Transaction Example (2-device system)**:
+```
+RISC-V Program          QEMU VM             QEMUBinaryComponent    Device 0    Device 1
+     │                     │                         │                │            │
+     │ Write 0x10200008   │                         │                │            │
+     ├────────────────────►│                         │                │            │
+     │                     │ MMIOReq(addr=0x10200008)│                │            │
+     │                     ├────socket0──────────────►│                │            │
+     │                     │                         │ Route by addr  │            │
+     │                     │                         ├───SST Event───►│            │
+     │                     │                         │                │ Process    │
+     │                     │                         │ ◄──Response────┤            │
+     │                     │ MMIOResp                │                │            │
+     │                     │◄────socket0─────────────┤                │            │
+     │ Continue execution │                         │                │            │
+     │◄────────────────────┤                         │                │            │
+     │                     │                         │                │            │
+     │ Read 0x10300004    │                         │                │            │
+     ├────────────────────►│                         │                │            │
+     │                     │ MMIOReq(addr=0x10300004)│                │            │
+     │                     ├────socket1──────────────►│                │            │
+     │                     │                         │ Route by addr  │            │
+     │                     │                         ├────SST Event──────────────►│
+     │                     │                         │                │            │ Process
+     │                     │                         │ ◄───Response───────────────┤
+     │                     │ MMIOResp                │                │            │
+     │                     │◄────socket1─────────────┤                │            │
+     │ data=0x...         │                         │                │            │
+     │◄────────────────────┤                         │                │            │
+```
 
-**2. QEMU SST Device (qemu-sst-device/sst-device.c)**
-- Implements QEMU device model
-- Handles MMIO read/write operations
-- Communicates with SST via Unix socket
-- Uses binary protocol for efficiency
+### Key Design Decisions
 
-**3. SST QEMUBinary Component (qemu-binary/)**
-- Manages QEMU subprocess lifecycle
-- Creates Unix socket server
-- Translates binary MMIO to SST events
-- Routes responses back to QEMU
+#### 1. **Why Per-Device Unix Sockets?**
+- **Independent channels**: No head-of-line blocking between devices
+- **Isolated failures**: One device crash doesn't affect others
+- **Scalability**: Linear scaling to N devices
+- **Debugging**: Easy to trace per-device traffic with `strace`
 
-**4. SST Device Component (acalsim-device/)**
-- Implements device behavior in SST
-- Processes SST memory events
-- Provides statistics and debugging
+**Alternative Considered**: Single multiplexed socket with device IDs
+- Rejected due to routing complexity, contention, and debugging difficulty
 
----
+#### 2. **Why Environment Variables for QEMU Configuration?**
+- **SysBusDevice constraint**: Cannot use `-device` command line
+- **QEMU machine code**: virt.c must create devices during initialization
+- **Clean interface**: No QEMU source modification per configuration
+- **Scalability**: Easy to extend to 16+ devices
 
-## Design Concepts
+**Alternative Considered**: QEMU config file or command-line args
+- Rejected as virt machine doesn't support device config files, and SysBusDevices can't be instantiated via `-device`
 
-### 1. Binary MMIO Protocol
-
-**Why Binary Protocol?**
+#### 3. **Why Binary Protocol?**
 - **Performance**: 10x faster than text-based serial protocol
 - **Simplicity**: Fixed-size structures, no parsing overhead
 - **Reliability**: Type-safe, no string conversion errors
 - **Efficiency**: Direct memory copy, minimal CPU usage
 
-**Protocol Structures:**
-
+**Protocol Structures** (qemu-sst-device/sst-device.c:15-28):
 ```c
-// Request from QEMU to SST (24 bytes)
 struct MMIORequest {
-    uint32_t magic;      // 0x53535452 ("SSTR") - validation
-    uint32_t type;       // 0=READ, 1=WRITE
-    uint64_t address;    // Physical address
-    uint32_t size;       // Access size (1, 2, 4, 8 bytes)
-    uint64_t data;       // Write data (for WRITE type)
+    uint8_t type;      // 0=read, 1=write
+    uint64_t addr;     // Global physical address
+    uint64_t data;     // Write data (ignored for reads)
 } __attribute__((packed));
 
-// Response from SST to QEMU (20 bytes)
 struct MMIOResponse {
-    uint32_t magic;      // 0x53535450 ("SSTP") - validation
-    uint32_t status;     // 0=OK, 1=ERROR
-    uint64_t data;       // Read data (for READ type)
-    uint32_t latency;    // Simulated latency in cycles
+    uint8_t success;   // 0=error, 1=success
+    uint64_t data;     // Read data (0 for writes)
 } __attribute__((packed));
-```
-
-**Protocol Flow:**
-
-```
-RISC-V Program          QEMU Device         SST Component       Device Model
-     │                       │                     │                  │
-     │ MMIO Write           │                     │                  │
-     ├──────────────────────►│                     │                  │
-     │                       │ MMIORequest         │                  │
-     │                       ├────────────────────►│                  │
-     │                       │                     │ MemoryTxnEvent   │
-     │                       │                     ├─────────────────►│
-     │                       │                     │                  │
-     │                       │                     │ MemoryRespEvent  │
-     │                       │                     │◄─────────────────┤
-     │                       │ MMIOResponse        │                  │
-     │                       │◄────────────────────┤                  │
-     │ Read Data            │                     │                  │
-     │◄──────────────────────┤                     │                  │
-```
-
-### 2. SST Event System
-
-**Event-Driven Architecture:**
-
-SST uses an event-driven discrete event simulation (DES) model:
-
-```cpp
-class MemoryTransactionEvent : public SST::Event {
-public:
-    enum Type { READ, WRITE };
-
-    Type type;           // Operation type
-    uint64_t address;    // Physical address
-    uint32_t size;       // Access size
-    uint64_t data;       // Write data
-
-    // Serialization for network/link transmission
-    void serialize_order(SST::Core::Serialization::serializer &ser) override {
-        Event::serialize_order(ser);
-        ser & type;
-        ser & address;
-        ser & size;
-        ser & data;
-    }
-
-    ImplementSerializable(MemoryTransactionEvent);
-};
-```
-
-**Event Routing:**
-
-```cpp
-// Component sends event
-MemoryTransactionEvent *event = new MemoryTransactionEvent(addr, data);
-device_port->send(event);
-
-// Component receives event (in event handler)
-void handleEvent(SST::Event *ev) {
-    MemoryTransactionEvent *event =
-        dynamic_cast<MemoryTransactionEvent*>(ev);
-
-    if (event->type == MemoryTransactionEvent::READ) {
-        // Process read
-        uint64_t data = readRegister(event->address);
-
-        // Send response
-        MemoryResponseEvent *resp = new MemoryResponseEvent(data);
-        cpu_port->send(resp);
-    }
-    delete event;
-}
-```
-
-### 3. QEMU Device Model
-
-**QEMU Object Model (QOM):**
-
-QEMU uses an object-oriented device model in C:
-
-```c
-// Device state structure
-typedef struct {
-    SysBusDevice parent_obj;  // Inheritance
-
-    MemoryRegion mmio;        // Memory-mapped I/O region
-    int socket_fd;            // Unix socket connection
-    char *socket_path;        // Socket path property
-} SSTDeviceState;
-
-// Type definition
-static const TypeInfo sst_device_info = {
-    .name          = TYPE_SST_DEVICE,
-    .parent        = TYPE_SYS_BUS_DEVICE,
-    .instance_size = sizeof(SSTDeviceState),
-    .instance_init = sst_device_init,
-    .class_init    = sst_device_class_init,
-};
-
-// Registration
-static void sst_device_register_types(void) {
-    type_register_static(&sst_device_info);
-}
-type_init(sst_device_register_types)
-```
-
-**Memory Region Operations:**
-
-```c
-// MMIO operation callbacks
-static const MemoryRegionOps sst_device_ops = {
-    .read = sst_device_read,
-    .write = sst_device_write,
-    .endianness = DEVICE_NATIVE_ENDIAN,
-    .valid = {
-        .min_access_size = 4,
-        .max_access_size = 8,
-    },
-};
-
-// Read handler
-static uint64_t sst_device_read(void *opaque, hwaddr offset,
-                                 unsigned size) {
-    SSTDeviceState *s = SST_DEVICE(opaque);
-
-    // Send read request to SST
-    MMIORequest req = {
-        .magic = MMIO_MAGIC_REQUEST,
-        .type = MMIO_TYPE_READ,
-        .address = offset,
-        .size = size,
-    };
-
-    send(s->socket_fd, &req, sizeof(req), 0);
-
-    // Receive response
-    MMIOResponse resp;
-    recv(s->socket_fd, &resp, sizeof(resp), MSG_WAITALL);
-
-    return resp.data;
-}
-```
-
-### 4. Bare-Metal Runtime (crt0.S)
-
-**CPU Initialization:**
-
-A complete bare-metal runtime must:
-1. Disable interrupts during initialization
-2. Set up trap/exception handlers
-3. Initialize global pointer (GP) for data access
-4. Set up stack pointer
-5. Copy .data section from ROM to RAM
-6. Clear .bss section
-7. Call main() with proper calling convention
-8. Handle return from main()
-
-```assembly
-.section .text.init
-.global _start
-_start:
-    # 1. Disable interrupts
-    csrci mstatus, 0x8
-
-    # 2. Set trap vector
-    la t0, trap_handler
-    csrw mtvec, t0
-
-    # 3. Initialize global pointer
-    .option push
-    .option norelax
-    la gp, __global_pointer$
-    .option pop
-
-    # 4. Set up stack
-    la sp, _stack_top
-
-    # 5. Copy .data section
-    la t0, __data_start_rom    # Source (ROM)
-    la t1, __data_start        # Destination (RAM)
-    la t2, __data_end
-1:  bge t1, t2, 2f
-    lw t3, 0(t0)
-    sw t3, 0(t1)
-    addi t0, t0, 4
-    addi t1, t1, 4
-    j 1b
-
-    # 6. Clear .bss
-2:  la t0, __bss_start
-    la t1, __bss_end
-3:  bge t0, t1, 4f
-    sw zero, 0(t0)
-    addi t0, t0, 4
-    j 3b
-
-    # 7. Call main(argc=0, argv=NULL)
-4:  li a0, 0
-    li a1, 0
-    call main
-
-    # 8. Handle return
-    j _exit
 ```
 
 ---
 
-## Development Phases
+## Building from Scratch
 
-### Phase 2B: Serial Text Protocol (Completed)
+This section walks through building the entire system from source on a clean Ubuntu/Debian system.
 
-**Objective**: Establish basic QEMU-SST communication
+### Prerequisites Installation
 
-**Components**:
-- RISC-V program using UART for output
-- QEMU serial device forwarding to SST
-- Text-based command protocol
-- Basic SST component parsing commands
+#### 1. SST Core Installation
 
-**Limitations**:
-- Low throughput (~1,000 tx/sec)
-- High CPU overhead (text parsing)
-- Protocol overhead ~80%
-- Not suitable for high-performance simulation
+```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    python3 \
+    python3-dev \
+    automake \
+    autoconf \
+    libtool \
+    openmpi-bin \
+    openmpi-common \
+    libopenmpi-dev
 
-### Phase 2C: Binary MMIO Protocol (Current)
+# Clone and build SST Core
+cd ~/projects
+git clone https://github.com/sstsimulator/sst-core.git
+cd sst-core
+./autogen.sh
+./configure --prefix=$HOME/local/sst-core
+make -j$(nproc)
+make install
 
-**Objective**: High-performance memory-mapped I/O communication
-
-**Sub-Phases**:
-
-**Phase 2C.1: SST Component Framework**
-- QEMUBinaryComponent: Manages QEMU subprocess
-- Unix socket server for binary communication
-- Event translation layer
-
-**Phase 2C.2: QEMU Device Implementation**
-- sst-device.c: QEMU device model
-- Binary MMIO protocol implementation
-- Socket client connection
-
-**Phase 2C.3: Integration**
-- Integrate sst-device.c into QEMU source
-- Modify RISC-V virt machine
-- End-to-end testing
-
-**Improvements**:
-- 10x throughput (~10,000 tx/sec)
-- 10x lower latency (~100μs/tx)
-- 90% reduction in CPU usage
-- Protocol overhead ~8%
-
-### Phase 2D: Multi-Core Support (Planned)
-
-**Objective**: Support multiple QEMU instances for multi-core simulation
-
-### Phase 3: Linux Integration (Future)
-
-**Objective**: Full Linux system with kernel drivers and user-space applications
-
----
-
-## Step-by-Step Development
-
-### Step 1: Design the Protocol
-
-**1.1 Define Communication Requirements**
-
-```
-Requirements:
-- Bidirectional communication (QEMU ↔ SST)
-- Support read/write operations
-- Variable access sizes (1, 2, 4, 8 bytes)
-- Low latency (<1ms)
-- Error detection
+# Set environment variables (add to ~/.bashrc)
+export SST_CORE_HOME=$HOME/local/sst-core
+export PATH=$SST_CORE_HOME/bin:$PATH
+export PKG_CONFIG_PATH=$SST_CORE_HOME/lib/pkgconfig:$PKG_CONFIG_PATH
+export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
 ```
 
-**1.2 Design Binary Structures**
+#### 2. RISC-V Toolchain Installation
 
+```bash
+# Download prebuilt toolchain (recommended)
+cd ~/projects
+wget https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.09.03/riscv32-elf-ubuntu-22.04-gcc-nightly-2024.09.03-nightly.tar.gz
+tar xzf riscv32-elf-ubuntu-22.04-gcc-nightly-2024.09.03-nightly.tar.gz
+mv riscv ~/local/riscv32-toolchain
+
+# Or build from source (slow, ~2 hours)
+git clone https://github.com/riscv/riscv-gnu-toolchain
+cd riscv-gnu-toolchain
+./configure --prefix=$HOME/local/riscv32-toolchain --with-arch=rv32gc --with-abi=ilp32d
+make -j$(nproc)
+
+# Set environment
+export RISCV=$HOME/local/riscv32-toolchain
+export PATH=$RISCV/bin:$PATH
+```
+
+#### 3. QEMU Build with sst-device Integration
+
+**Critical**: The sst-device must be integrated into QEMU source and built as part of QEMU.
+
+```bash
+# Clone QEMU
+cd ~/projects
+git clone https://gitlab.com/qemu-project/qemu.git qemu-sst
+cd qemu-sst
+git checkout v8.1.0  # Tested version
+
+# Create sst-device directory
+mkdir -p hw/misc/qemu-sst-device
+```
+
+**Step 3a: Copy sst-device.c**
+
+From your project: `cp qemu-sst-device/sst-device.c hw/misc/qemu-sst-device/`
+
+**Step 3b: Create hw/misc/qemu-sst-device/meson.build**:
+```meson
+softmmu_ss.add(when: 'CONFIG_SST_DEVICE', if_true: files('sst-device.c'))
+```
+
+**Step 3c: Update hw/misc/Kconfig** - Add to the end:
+```kconfig
+config SST_DEVICE
+    bool
+    depends on RISCV
+    default y
+```
+
+**Step 3d: Update hw/riscv/Kconfig** - Add to RISCV_VIRT section (around line 40):
+```kconfig
+config RISCV_VIRT
+    bool
+    select RISCV_NUMA
+    select GOLDFISH_RTC
+    select MSI_NONBROKEN
+    select PCI
+    select PCI_EXPRESS
+    select PCI_EXPRESS_GENERIC_BRIDGE
+    select PFLASH_CFI01
+    select SERIAL
+    select RISCV_ACLINT
+    select RISCV_APLIC
+    select RISCV_IMSIC
+    select SIFIVE_PLIC
+    select SIFIVE_TEST
+    select VIRTIO_MMIO
+    select FW_CFG_DMA
+    select PLATFORM_BUS
+    select ACPI
+    select ACPI_PCI
+    select SST_DEVICE    # ADD THIS LINE
+```
+
+**Step 3e: Modify hw/riscv/virt.c** - Add N-device support (around line 948):
+
+Replace the single device instantiation with:
 ```c
-// Design considerations:
-// - Fixed size for predictable performance
-// - Magic numbers for validation
-// - Explicit endianness (native)
-// - Packed to avoid padding
+    /* SST integration device(s) - support N devices via environment variables */
+    const char *num_devices_str = getenv("SST_NUM_DEVICES");
+    int num_sst_devices = num_devices_str ? atoi(num_devices_str) : 1;
 
-#define MMIO_MAGIC_REQUEST  0x53535452  // "SSTR"
-#define MMIO_MAGIC_RESPONSE 0x53535450  // "SSTP"
+    /* Clamp to valid range */
+    if (num_sst_devices < 1) num_sst_devices = 1;
+    if (num_sst_devices > 16) num_sst_devices = 16;
 
-struct MMIORequest {
-    uint32_t magic;
-    uint32_t type;
-    uint64_t address;
-    uint32_t size;
-    uint64_t data;
-} __attribute__((packed));
-```
+    for (int dev_idx = 0; dev_idx < num_sst_devices; dev_idx++) {
+        char env_socket[64], env_base[64];
+        snprintf(env_socket, sizeof(env_socket), "SST_DEVICE%d_SOCKET", dev_idx);
+        snprintf(env_base, sizeof(env_base), "SST_DEVICE%d_BASE", dev_idx);
 
-**1.3 Document Protocol Flow**
+        const char *socket_path = getenv(env_socket);
+        const char *base_str = getenv(env_base);
 
-Create sequence diagrams and state machines to document the protocol behavior.
-
-### Step 2: Implement RISC-V Firmware
-
-**2.1 Create Bare-Metal Runtime (crt0.S)**
-
-Start with minimal initialization:
-
-```assembly
-# Version 1: Minimal runtime
-.section .text.init
-.global _start
-_start:
-    la sp, _stack_top    # Set stack
-    call main            # Call main
-    j .                  # Infinite loop
-```
-
-Add features incrementally:
-- Trap handling
-- Global pointer initialization
-- .data/.bss initialization
-- Proper ABI compliance
-
-**2.2 Write Test Program**
-
-Start simple, add complexity:
-
-```c
-// Version 1: Single write
-void _start() {
-    volatile uint32_t *device = (volatile uint32_t *)0x10200000;
-    *device = 0xDEADBEEF;
-    while (1);
-}
-
-// Version 2: Write and read back
-int main() {
-    volatile uint32_t *data_in = (volatile uint32_t *)0x10200000;
-    volatile uint32_t *data_out = (volatile uint32_t *)0x10200004;
-
-    *data_in = 0xDEADBEEF;
-    uint32_t result = *data_out;
-
-    return (result == 0xDEADBEEF) ? 0 : 1;
-}
-
-// Version 3: Full test suite (see mmio_test.c)
-```
-
-**2.3 Create Linker Script**
-
-Define memory layout:
-
-```ld
-MEMORY {
-    RAM : ORIGIN = 0x80000000, LENGTH = 128M
-}
-
-SECTIONS {
-    .text : {
-        *(.text.init)    /* Startup code first */
-        *(.text*)
-    } > RAM
-
-    .rodata : { *(.rodata*) } > RAM
-    .data : { *(.data*) } > RAM
-    .bss : { *(.bss*) } > RAM
-
-    _stack_top = ORIGIN(RAM) + LENGTH(RAM);
-}
-```
-
-### Step 3: Implement QEMU Device
-
-**3.1 Create Device State Structure**
-
-```c
-#define TYPE_SST_DEVICE "sst-device"
-#define SST_DEVICE(obj) \
-    OBJECT_CHECK(SSTDeviceState, (obj), TYPE_SST_DEVICE)
-
-typedef struct {
-    SysBusDevice parent_obj;
-
-    MemoryRegion mmio;
-    int socket_fd;
-    char *socket_path;
-    uint64_t base_addr;
-} SSTDeviceState;
-```
-
-**3.2 Implement MMIO Operations**
-
-```c
-static uint64_t sst_device_read(void *opaque, hwaddr offset,
-                                 unsigned size) {
-    SSTDeviceState *s = SST_DEVICE(opaque);
-
-    // Prepare request
-    MMIORequest req = {
-        .magic = MMIO_MAGIC_REQUEST,
-        .type = MMIO_TYPE_READ,
-        .address = s->base_addr + offset,
-        .size = size,
-        .data = 0,
-    };
-
-    // Send to SST
-    if (send(s->socket_fd, &req, sizeof(req), 0) != sizeof(req)) {
-        fprintf(stderr, "SST device: send failed\n");
-        return 0;
-    }
-
-    // Receive response
-    MMIOResponse resp;
-    if (recv(s->socket_fd, &resp, sizeof(resp), MSG_WAITALL) != sizeof(resp)) {
-        fprintf(stderr, "SST device: recv failed\n");
-        return 0;
-    }
-
-    // Validate response
-    if (resp.magic != MMIO_MAGIC_RESPONSE) {
-        fprintf(stderr, "SST device: invalid response magic\n");
-        return 0;
-    }
-
-    return resp.data;
-}
-
-static void sst_device_write(void *opaque, hwaddr offset,
-                              uint64_t value, unsigned size) {
-    SSTDeviceState *s = SST_DEVICE(opaque);
-
-    MMIORequest req = {
-        .magic = MMIO_MAGIC_REQUEST,
-        .type = MMIO_TYPE_WRITE,
-        .address = s->base_addr + offset,
-        .size = size,
-        .data = value,
-    };
-
-    send(s->socket_fd, &req, sizeof(req), 0);
-
-    // Wait for acknowledgment
-    MMIOResponse resp;
-    recv(s->socket_fd, &resp, sizeof(resp), MSG_WAITALL);
-}
-```
-
-**3.3 Implement Device Initialization**
-
-```c
-static void sst_device_init(Object *obj) {
-    SSTDeviceState *s = SST_DEVICE(obj);
-
-    // Initialize MMIO region
-    memory_region_init_io(&s->mmio, obj, &sst_device_ops, s,
-                          TYPE_SST_DEVICE, 0x1000);
-    sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->mmio);
-
-    s->socket_fd = -1;
-}
-
-static void sst_device_realize(DeviceState *dev, Error **errp) {
-    SSTDeviceState *s = SST_DEVICE(dev);
-
-    // Connect to SST socket
-    s->socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (s->socket_fd < 0) {
-        error_setg(errp, "Failed to create socket");
-        return;
-    }
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-    strncpy(addr.sun_path, s->socket_path, sizeof(addr.sun_path) - 1);
-
-    // Retry connection (SST may not be ready yet)
-    int retries = 10;
-    while (retries-- > 0) {
-        if (connect(s->socket_fd, (struct sockaddr *)&addr,
-                    sizeof(addr)) == 0) {
-            break;
+        /* Default values if not specified */
+        char default_socket[128];
+        if (!socket_path) {
+            snprintf(default_socket, sizeof(default_socket),
+                     "/tmp/qemu-sst-device%d.sock", dev_idx);
+            socket_path = default_socket;
         }
-        usleep(100000);  // 100ms
-    }
 
-    if (retries < 0) {
-        error_setg(errp, "Failed to connect to SST socket");
-        close(s->socket_fd);
-        s->socket_fd = -1;
+        uint64_t base_addr = base_str ? strtoul(base_str, NULL, 0) :
+                             (0x10200000 + dev_idx * 0x100000);
+
+        /* Create and configure device */
+        DeviceState *sst_dev = qdev_new("sst-device");
+        qdev_prop_set_string(sst_dev, "socket", socket_path);
+        qdev_prop_set_uint64(sst_dev, "base_address", base_addr);
+
+        /* Realize and map to system bus */
+        sysbus_realize_and_unref(SYS_BUS_DEVICE(sst_dev), &error_fatal);
+        sysbus_mmio_map(SYS_BUS_DEVICE(sst_dev), 0, base_addr);
+
+        printf("SST Device %d: socket=%s, base=0x%lx\n",
+               dev_idx, socket_path, base_addr);
     }
-}
 ```
 
-### Step 4: Implement SST Component
+**Step 3f: Configure and build QEMU**:
+```bash
+cd ~/projects/qemu-sst
+mkdir build
+cd build
+../configure \
+    --target-list=riscv32-softmmu \
+    --enable-debug \
+    --prefix=$HOME/local/qemu-sst
 
-**4.1 Define Component Class**
+ninja
+ninja install
+
+# Verify sst-device compiled
+grep -r "sst-device" build.ninja
+```
+
+**Step 3g: Verify QEMU Installation**:
+```bash
+$HOME/local/qemu-sst/bin/qemu-system-riscv32 --version
+# Should show: QEMU emulator version 8.1.0
+```
+
+#### 4. Build QEMUBinaryComponent
+
+```bash
+cd src/qemu-acalsim-sst-baremetal/qemu-binary
+
+# The Makefile uses environment variables
+export SST_CORE_HOME=$HOME/local/sst-core
+export QEMU_PATH=$HOME/local/qemu-sst/bin/qemu-system-riscv32
+
+# Build
+make clean
+make -j$(nproc)
+make install
+
+# Verify installation
+sst-info qemubinary
+# Should show QEMUBinary component with parameters
+```
+
+**Makefile Key Variables** (qemu-binary/Makefile):
+```makefile
+SST_CONFIG = $(SST_CORE_HOME)/bin/sst-config
+CXX = $(shell $(SST_CONFIG) --CXX)
+CXXFLAGS = $(shell $(SST_CONFIG) --ELEMENT_CXXFLAGS) -std=c++14 -g -O2
+LDFLAGS = $(shell $(SST_CONFIG) --ELEMENT_LDFLAGS)
+
+# Component source
+SOURCES = QEMUBinaryComponent.cc
+TARGET = libqemubinary.so
+
+# Installation
+INSTALL_DIR = $(shell $(SST_CONFIG) --prefix)/lib/sstcore
+
+$(TARGET): $(SOURCES:.cc=.o)
+	$(CXX) $(LDFLAGS) -shared -o $@ $^
+
+install: $(TARGET)
+	install -D $(TARGET) $(INSTALL_DIR)/$(TARGET)
+```
+
+---
+
+## Component Design Patterns
+
+### QEMUBinaryComponent Architecture
+
+**File**: qemu-binary/QEMUBinaryComponent.hh
 
 ```cpp
 class QEMUBinaryComponent : public SST::Component {
 public:
-    // SST Registration Macro
-    SST_ELI_REGISTER_COMPONENT(
-        QEMUBinaryComponent,
-        "qemubinary",
-        "QEMUBinary",
-        SST_ELI_ELEMENT_VERSION(1, 0, 0),
-        "QEMU subprocess with binary MMIO protocol",
-        COMPONENT_CATEGORY_PROCESSOR
-    )
-
-    // Parameter registration
-    SST_ELI_DOCUMENT_PARAMS(
-        {"clock", "Clock frequency", "1GHz"},
-        {"verbose", "Verbosity level (0-3)", "0"},
-        {"binary_path", "Path to RISC-V binary", ""},
-        {"qemu_path", "Path to QEMU executable", "qemu-system-riscv32"},
-        {"socket_path", "Unix socket path", "/tmp/qemu-sst-mmio.sock"},
-        {"device_base", "Device base address", "0x10200000"}
-    )
-
-    // Port registration
-    SST_ELI_DOCUMENT_PORTS(
-        {"device_port", "Port to device component", {}}
-    )
-
-    // Statistic registration
-    SST_ELI_DOCUMENT_STATISTICS(
-        {"mmio_reads", "Number of MMIO read operations", "count", 1},
-        {"mmio_writes", "Number of MMIO write operations", "count", 1},
-        {"bytes_sent", "Bytes sent to QEMU", "bytes", 1},
-        {"bytes_received", "Bytes received from QEMU", "bytes", 1}
-    )
-
+    // SST Component interface
     QEMUBinaryComponent(SST::ComponentId_t id, SST::Params& params);
     ~QEMUBinaryComponent();
 
     void setup() override;
     void finish() override;
+
+    // Clock handler (called each simulation cycle)
     bool clockTick(SST::Cycle_t cycle);
 
+    // Event handlers (called when device sends response)
+    void handleDeviceEvent(SST::Event* event, int device_id);
+
+    // SST ELI registration macros
+    SST_ELI_REGISTER_COMPONENT(
+        QEMUBinaryComponent,
+        "qemubinary",
+        "QEMUBinary",
+        SST_ELI_ELEMENT_VERSION(1,0,0),
+        "QEMU RISC-V binary executor with N-device integration",
+        COMPONENT_CATEGORY_PROCESSOR
+    )
+
+    SST_ELI_DOCUMENT_PARAMS(
+        {"clock", "Clock frequency", "1GHz"},
+        {"num_devices", "Number of devices", "1"},
+        {"device%d_base", "Base address for device %d", "0x10000000"},
+        {"device%d_size", "Memory size for device %d", "4096"},
+        {"device%d_name", "Name for device %d", "device_%d"}
+    )
+
+    SST_ELI_DOCUMENT_PORTS(
+        {"device_port_%d", "Port to device %d", {}}
+    )
+
 private:
-    void handleDeviceResponse(SST::Event *ev);
+    // Device management
+    struct DeviceInfo {
+        uint64_t base_addr;        // Device base address
+        uint64_t size;             // Device memory size
+        SST::Link* link;           // Link to device component
+        std::string name;          // Device name
+        uint64_t num_requests;     // Statistics
+
+        // N-socket support fields
+        std::string socket_path;   // Unix socket path
+        int server_fd;             // Server socket file descriptor
+        int client_fd;             // Client connection file descriptor
+        bool socket_ready;         // Connection status
+    };
+
+    std::vector<DeviceInfo> devices_;
+    bool use_multi_device_;
+
+    // QEMU process management
+    pid_t qemu_pid_;
+    std::string binary_path_;
+    std::string qemu_path_;
+
+    // N-socket methods
+    void setupDeviceSocket(DeviceInfo* dev, int dev_id);
+    void acceptDeviceConnection(DeviceInfo* dev);
+    void pollDeviceSockets();
+    void handleMMIORequest(DeviceInfo* dev);
+    void sendMMIOResponse(DeviceInfo* dev, bool success, uint64_t data);
+
+    // QEMU lifecycle
     void launchQEMU();
-    void setupSocket();
-    void handleMMIORequest();
+    void shutdownQEMU();
 
-    SST::Link *device_port;
-    SST::Clock::HandlerBase *clock_handler;
+    // Address routing
+    DeviceInfo* findDeviceByAddress(uint64_t addr);
 
-    int server_fd;
-    int client_fd;
-    pid_t qemu_pid;
-
-    std::string binary_path;
-    std::string qemu_path;
-    std::string socket_path;
-    uint64_t device_base;
-    int verbose;
-
-    // Statistics
-    SST::Statistics::Statistic<uint64_t> *stat_mmio_reads;
-    SST::Statistics::Statistic<uint64_t> *stat_mmio_writes;
+    // Logging
+    SST::Output output_;
+    SST::TimeConverter* clock_tc_;
 };
 ```
 
-**4.2 Implement Constructor**
+### Event Design Pattern
+
+**Why Event Serialization is Critical**:
+
+SST events can cross MPI boundaries in multi-server deployments. Serialization allows events to be transmitted over network between simulation ranks.
 
 ```cpp
-QEMUBinaryComponent::QEMUBinaryComponent(SST::ComponentId_t id,
-                                         SST::Params& params)
-    : SST::Component(id) {
+// Example custom event for device communication
+class DeviceEvent : public SST::Event {
+public:
+    enum Type { READ, WRITE };
 
-    // Get parameters
-    binary_path = params.find<std::string>("binary_path", "");
-    qemu_path = params.find<std::string>("qemu_path", "qemu-system-riscv32");
-    socket_path = params.find<std::string>("socket_path",
-                                           "/tmp/qemu-sst-mmio.sock");
-    device_base = params.find<uint64_t>("device_base", 0x10200000);
-    verbose = params.find<int>("verbose", 0);
+    DeviceEvent(Type t, uint64_t addr, uint64_t data = 0)
+        : type(t), address(addr), data(data) {}
 
-    // Validate required parameters
-    if (binary_path.empty()) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Parameter 'binary_path' is required\n");
+    Type getType() const { return type; }
+    uint64_t getAddress() const { return address; }
+    uint64_t getData() const { return data; }
+
+    // CRITICAL: Serialize ALL member variables for MPI transmission
+    void serialize_order(SST::Core::Serialization::serializer& ser) override {
+        Event::serialize_order(ser);
+        ser& type;
+        ser& address;
+        ser& data;
     }
 
-    // Configure link to device
-    device_port = configureLink("device_port",
+    ImplementSerializable(DeviceEvent);
+
+private:
+    Type type;
+    uint64_t address;
+    uint64_t data;
+};
+```
+
+### Link Handler Pattern with Device ID Context
+
+**File**: qemu-binary/QEMUBinaryComponent.cc (Constructor)
+
+```cpp
+// In QEMUBinaryComponent constructor
+for (size_t i = 0; i < num_devices; i++) {
+    std::string port_name = "device_port_" + std::to_string(i);
+
+    // Create handler with device ID as context parameter
+    SST::Link* link = configureLink(
+        port_name,
         new SST::Event::Handler<QEMUBinaryComponent>(
-            this, &QEMUBinaryComponent::handleDeviceResponse));
-
-    if (!device_port) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Failed to configure device_port\n");
-    }
-
-    // Register clock
-    std::string clock_freq = params.find<std::string>("clock", "1GHz");
-    clock_handler = new SST::Clock::Handler<QEMUBinaryComponent>(
-        this, &QEMUBinaryComponent::clockTick);
-    registerClock(clock_freq, clock_handler);
-
-    // Register statistics
-    stat_mmio_reads = registerStatistic<uint64_t>("mmio_reads");
-    stat_mmio_writes = registerStatistic<uint64_t>("mmio_writes");
-
-    // Initialize state
-    server_fd = -1;
-    client_fd = -1;
-    qemu_pid = -1;
-}
-```
-
-**4.3 Implement Setup**
-
-```cpp
-void QEMUBinaryComponent::setup() {
-    getSimulationOutput().output("Setting up QEMUBinaryComponent\n");
-
-    // Create socket server
-    setupSocket();
-
-    // Launch QEMU subprocess
-    launchQEMU();
-
-    getSimulationOutput().output("QEMU launched successfully\n");
-}
-
-void QEMUBinaryComponent::setupSocket() {
-    // Remove old socket file
-    unlink(socket_path.c_str());
-
-    // Create Unix socket
-    server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Failed to create socket\n");
-    }
-
-    // Bind to path
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-    strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
-
-    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Failed to bind socket to %s\n", socket_path.c_str());
-    }
-
-    // Listen for connections
-    if (listen(server_fd, 1) < 0) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Failed to listen on socket\n");
-    }
-
-    if (verbose > 0) {
-        getSimulationOutput().output("Socket server ready at %s\n",
-                                     socket_path.c_str());
-    }
-}
-
-void QEMUBinaryComponent::launchQEMU() {
-    qemu_pid = fork();
-
-    if (qemu_pid < 0) {
-        getSimulationOutput().fatal(CALL_INFO, -1, "Failed to fork\n");
-    }
-
-    if (qemu_pid == 0) {
-        // Child process: exec QEMU
-        execlp(qemu_path.c_str(), qemu_path.c_str(),
-               "-M", "virt",
-               "-bios", "none",
-               "-nographic",
-               "-kernel", binary_path.c_str(),
-               "-device", "sst-device,socket=/tmp/qemu-sst-mmio.sock",
-               nullptr);
-
-        // If exec fails
-        fprintf(stderr, "Failed to launch QEMU\n");
-        exit(1);
-    }
-
-    // Parent process: wait for QEMU to connect
-    if (verbose > 0) {
-        getSimulationOutput().output("QEMU PID: %d\n", qemu_pid);
-        getSimulationOutput().output("Waiting for QEMU to connect...\n");
-    }
-
-    client_fd = accept(server_fd, nullptr, nullptr);
-    if (client_fd < 0) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Failed to accept connection from QEMU\n");
-    }
-
-    // Set non-blocking mode for polling
-    int flags = fcntl(client_fd, F_GETFL, 0);
-    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-}
-```
-
-**4.4 Implement Clock Handler**
-
-```cpp
-bool QEMUBinaryComponent::clockTick(SST::Cycle_t cycle) {
-    // Poll for MMIO requests from QEMU
-    handleMMIORequest();
-
-    // Return false to continue simulation
-    return false;
-}
-
-void QEMUBinaryComponent::handleMMIORequest() {
-    MMIORequest req;
-
-    ssize_t n = recv(client_fd, &req, sizeof(req), MSG_DONTWAIT);
-
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // No data available (expected)
-            return;
-        }
-        getSimulationOutput().output("recv error: %s\n", strerror(errno));
-        return;
-    }
-
-    if (n == 0) {
-        // Connection closed
-        getSimulationOutput().output("QEMU disconnected\n");
-        return;
-    }
-
-    if (n != sizeof(req)) {
-        getSimulationOutput().output("Partial read: %zd bytes\n", n);
-        return;
-    }
-
-    // Validate magic number
-    if (req.magic != MMIO_MAGIC_REQUEST) {
-        getSimulationOutput().output("Invalid magic: 0x%08x\n", req.magic);
-        return;
-    }
-
-    if (verbose > 1) {
-        getSimulationOutput().output("MMIO %s: addr=0x%016lx size=%u data=0x%016lx\n",
-            (req.type == MMIO_TYPE_READ) ? "READ" : "WRITE",
-            req.address, req.size, req.data);
-    }
-
-    // Update statistics
-    if (req.type == MMIO_TYPE_READ) {
-        stat_mmio_reads->addData(1);
-    } else {
-        stat_mmio_writes->addData(1);
-    }
-
-    // Create SST event
-    MemoryTransactionEvent *ev = new MemoryTransactionEvent(
-        (req.type == MMIO_TYPE_READ) ?
-            MemoryTransactionEvent::READ :
-            MemoryTransactionEvent::WRITE,
-        req.address,
-        req.size,
-        req.data
+            this,
+            &QEMUBinaryComponent::handleDeviceEvent,
+            i  // Pass device ID as handler context
+        )
     );
 
-    // Send to device
-    device_port->send(ev);
+    if (!link) {
+        output_.fatal(CALL_INFO, -1, "Failed to configure %s\n",
+                      port_name.c_str());
+    }
+
+    devices_[i].link = link;
 }
 
-void QEMUBinaryComponent::handleDeviceResponse(SST::Event *ev) {
-    MemoryResponseEvent *resp = dynamic_cast<MemoryResponseEvent*>(ev);
-
-    if (!resp) {
-        getSimulationOutput().output("Invalid response event\n");
-        delete ev;
-        return;
+// Handler implementation receives device_id directly
+void QEMUBinaryComponent::handleDeviceEvent(SST::Event* ev, int device_id) {
+    DeviceEvent* dev_ev = dynamic_cast<DeviceEvent*>(ev);
+    if (!dev_ev) {
+        output_.fatal(CALL_INFO, -1, "Invalid event type\n");
     }
 
-    if (verbose > 1) {
-        getSimulationOutput().output("Device response: data=0x%016lx\n",
-                                     resp->data);
-    }
+    // Access device directly by ID (no map lookup needed)
+    DeviceInfo& dev = devices_[device_id];
 
-    // Send response to QEMU
-    MMIOResponse mmio_resp = {
-        .magic = MMIO_MAGIC_RESPONSE,
-        .status = 0,  // OK
-        .data = resp->data,
-        .latency = resp->latency,
-    };
+    // Process device response
+    bool success = (dev_ev->getType() == DeviceEvent::READ);
+    uint64_t data = dev_ev->getData();
 
-    send(client_fd, &mmio_resp, sizeof(mmio_resp), 0);
+    sendMMIOResponse(&dev, success, data);
 
     delete ev;
 }
 ```
 
-**4.5 Implement Finish**
+**Pattern Benefits**:
+- Type-safe event handling
+- O(1) device lookup (no map needed)
+- Clean separation of concerns
+- Handler context eliminates global state
+
+---
+
+## N-Device Architecture
+
+### Socket Lifecycle
+
+**File**: qemu-binary/QEMUBinaryComponent.cc:624-656
 
 ```cpp
-void QEMUBinaryComponent::finish() {
-    getSimulationOutput().output("Shutting down QEMU\n");
+void QEMUBinaryComponent::setupDeviceSocket(DeviceInfo* dev, int dev_id) {
+    // 1. Create unique socket path per device
+    dev->socket_path = "/tmp/qemu-sst-device" + std::to_string(dev_id) + ".sock";
 
-    // Close sockets
-    if (client_fd >= 0) {
-        close(client_fd);
-    }
-    if (server_fd >= 0) {
-        close(server_fd);
-    }
+    // 2. Remove stale socket file from previous runs
+    unlink(dev->socket_path.c_str());
 
-    // Terminate QEMU
-    if (qemu_pid > 0) {
-        kill(qemu_pid, SIGTERM);
-        waitpid(qemu_pid, nullptr, 0);
+    // 3. Create Unix domain socket
+    dev->server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (dev->server_fd < 0) {
+        output_.fatal(CALL_INFO, -1, "Failed to create socket for device %d: %s\n",
+                      dev_id, strerror(errno));
     }
 
-    // Remove socket file
-    unlink(socket_path.c_str());
+    // 4. Set non-blocking mode (critical for SST simulation)
+    int flags = fcntl(dev->server_fd, F_GETFL, 0);
+    fcntl(dev->server_fd, F_SETFL, flags | O_NONBLOCK);
+
+    // 5. Bind to socket path
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, dev->socket_path.c_str(), sizeof(addr.sun_path) - 1);
+
+    if (bind(dev->server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        output_.fatal(CALL_INFO, -1, "Failed to bind socket %s: %s\n",
+                      dev->socket_path.c_str(), strerror(errno));
+    }
+
+    // 6. Listen for incoming connection from QEMU
+    if (listen(dev->server_fd, 1) < 0) {
+        output_.fatal(CALL_INFO, -1, "Failed to listen on socket %s: %s\n",
+                      dev->socket_path.c_str(), strerror(errno));
+    }
+
+    dev->client_fd = -1;
+    dev->socket_ready = false;
+
+    output_.verbose(CALL_INFO, 1, 0, "Device %s socket listening at %s\n",
+                    dev->name.c_str(), dev->socket_path.c_str());
 }
 ```
 
-### Step 5: Integrate into QEMU
+### Non-Blocking Accept Pattern
 
-**5.1 Add Source Files**
+**File**: qemu-binary/QEMUBinaryComponent.cc:658-687
 
-```bash
-# Copy device implementation
-cp qemu-sst-device/sst-device.c qemu/hw/misc/
+```cpp
+void QEMUBinaryComponent::acceptDeviceConnection(DeviceInfo* dev) {
+    if (dev->socket_ready) return;  // Already connected
 
-# Update build configuration
-vim qemu/hw/misc/meson.build
+    // Non-blocking accept: returns immediately if no connection pending
+    int client_fd = accept(dev->server_fd, NULL, NULL);
+
+    if (client_fd < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No connection pending - this is normal, simulation continues
+            return;
+        }
+        // Other errors are logged but non-fatal
+        output_.output("Warning: accept() failed for %s: %s\n",
+                       dev->name.c_str(), strerror(errno));
+        return;
+    }
+
+    // Connection established! Set client socket to non-blocking
+    int flags = fcntl(client_fd, F_GETFL, 0);
+    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+
+    dev->client_fd = client_fd;
+    dev->socket_ready = true;
+
+    output_.verbose(CALL_INFO, 1, 0, "Device %s connected\n", dev->name.c_str());
+}
 ```
 
-Add to `meson.build`:
-```meson
-softmmu_ss.add(when: 'CONFIG_SST_DEVICE', if_true: files('sst-device.c'))
+**Why Non-Blocking I/O is Critical**:
+- SST simulation must continue even if QEMU hasn't connected yet
+- Devices can connect at different times asynchronously
+- Avoids deadlock if QEMU crashes before connecting
+- Allows graceful degradation and reconnection
+
+### Clock Tick Polling Pattern
+
+**File**: qemu-binary/QEMUBinaryComponent.cc:198-219
+
+```cpp
+bool QEMUBinaryComponent::clockTick(SST::Cycle_t cycle) {
+    if (use_multi_device_) {
+        pollDeviceSockets();  // N-device mode
+    } else {
+        // Legacy single-device mode (backward compatible)
+        if (socket_ready_ && client_fd_ >= 0) {
+            handleMMIORequest();
+        }
+    }
+
+    return false;  // Never unregister clock
+}
+
+void QEMUBinaryComponent::pollDeviceSockets() {
+    for (size_t i = 0; i < devices_.size(); i++) {
+        DeviceInfo& dev = devices_[i];
+
+        // Try to accept connection if not yet connected
+        if (!dev.socket_ready) {
+            acceptDeviceConnection(&dev);
+        }
+
+        // Poll for MMIO requests if connected
+        if (dev.socket_ready && dev.client_fd >= 0) {
+            handleMMIORequest(&dev);
+        }
+    }
+}
 ```
 
-**5.2 Update Kconfig**
+**Performance Characteristics**:
+- Time complexity: O(N) per clock tick where N = number of devices
+- Space complexity: O(N) for device array
+- Optimization opportunity: Use `select()` or `epoll()` for large N (>16)
 
-```bash
-vim qemu/hw/misc/Kconfig
+### QEMU Launch with Environment Variables
+
+**File**: qemu-binary/QEMUBinaryComponent.cc:344-373
+
+Instead of command-line `-device` arguments (which don't work for SysBusDevice), the component sets environment variables that QEMU's virt machine reads:
+
+```cpp
+void QEMUBinaryComponent::launchQEMU() {
+    // ... (create and fork child process)
+
+    if (qemu_pid_ == 0) {
+        // Child process: configure environment and exec QEMU
+
+        if (use_multi_device_) {
+            // Configure N devices via environment variables
+            char num_buf[16];
+            snprintf(num_buf, sizeof(num_buf), "%zu", devices_.size());
+            setenv("SST_NUM_DEVICES", num_buf, 1);
+
+            for (size_t i = 0; i < devices_.size(); i++) {
+                char env_socket[32], env_base[32], addr_buf[32];
+
+                // SST_DEVICE0_SOCKET=/tmp/qemu-sst-device0.sock
+                snprintf(env_socket, sizeof(env_socket), "SST_DEVICE%zu_SOCKET", i);
+                setenv(env_socket, devices_[i].socket_path.c_str(), 1);
+
+                // SST_DEVICE0_BASE=10200000 (hex without 0x prefix)
+                snprintf(env_base, sizeof(env_base), "SST_DEVICE%zu_BASE", i);
+                snprintf(addr_buf, sizeof(addr_buf), "%lx", devices_[i].base_addr);
+                setenv(env_base, addr_buf, 1);
+            }
+        }
+
+        // Execute QEMU (environment variables inherited)
+        std::vector<const char*> args;
+        args.push_back(qemu_path_.c_str());
+        args.push_back("-M");
+        args.push_back("virt");
+        args.push_back("-nographic");
+        args.push_back("-kernel");
+        args.push_back(binary_path_.c_str());
+        args.push_back(nullptr);
+
+        execv(qemu_path_.c_str(), (char* const*)args.data());
+
+        // If exec fails
+        fprintf(stderr, "Failed to launch QEMU: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    // Parent process continues...
+}
 ```
 
-Add:
-```kconfig
-config SST_DEVICE
-    bool
-    default y
-```
-
-**5.3 Modify RISC-V Virt Machine**
-
-```bash
-vim qemu/hw/riscv/virt.c
-```
-
-Add memory map entry:
+**QEMU virt.c reads these environment variables** (hw/riscv/virt.c:948-989):
 ```c
-static const MemMapEntry virt_memmap[] = {
-    // ... existing entries ...
-    [VIRT_SST_DEVICE] = { 0x10200000, 0x1000 },
-};
-```
+const char *num_devices_str = getenv("SST_NUM_DEVICES");
+int num_sst_devices = num_devices_str ? atoi(num_devices_str) : 1;
 
-Add device creation:
-```c
-static void virt_machine_init(MachineState *machine) {
-    // ... existing code ...
+for (int dev_idx = 0; dev_idx < num_sst_devices; dev_idx++) {
+    char env_socket[64], env_base[64];
+    snprintf(env_socket, sizeof(env_socket), "SST_DEVICE%d_SOCKET", dev_idx);
+    snprintf(env_base, sizeof(env_base), "SST_DEVICE%d_BASE", dev_idx);
 
-    // Add SST device
-    DeviceState *sst_dev = qdev_new(TYPE_SST_DEVICE);
-    object_property_set_str(OBJECT(sst_dev), "socket",
-                           "/tmp/qemu-sst-mmio.sock", &error_fatal);
+    const char *socket_path = getenv(env_socket);
+    const char *base_str = getenv(env_base);
+
+    // Create and map device at specified address
+    DeviceState *sst_dev = qdev_new("sst-device");
+    qdev_prop_set_string(sst_dev, "socket", socket_path);
+    qdev_prop_set_uint64(sst_dev, "base_address", base_addr);
     sysbus_realize_and_unref(SYS_BUS_DEVICE(sst_dev), &error_fatal);
-    sysbus_mmio_map(SYS_BUS_DEVICE(sst_dev), 0,
-                    virt_memmap[VIRT_SST_DEVICE].base);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sst_dev), 0, base_addr);
 }
 ```
 
-**5.4 Build QEMU**
+---
 
-```bash
-cd qemu
-mkdir build
-cd build
-../configure --target-list=riscv32-softmmu --enable-debug
-make -j$(nproc)
-sudo make install
-```
+## SST Python Configuration Customization
 
-### Step 6: Create SST Configuration
+### Configuration File Architecture
 
-**6.1 Write Python Configuration**
+**Critical Understanding**: SST Python scripts are NOT just configuration files - they are **full Python programs** that execute to build the simulation graph.
 
 ```python
-#!/usr/bin/env python3
 import sst
+
+# This is Python code executing at runtime!
+# You have full Python language features:
+# - Loops, conditionals, functions
+# - External libraries (json, yaml, numpy, etc.)
+# - File I/O, command-line arguments
+# - Dynamic component creation
+```
+
+### Pattern 1: Loop-Based Device Creation
+
+**Example**: Creating 8 identical devices with parameterized addresses
+
+```python
+import sst
+
+NUM_DEVICES = 8
+BASE_ADDR = 0x10200000
+ADDR_STRIDE = 0x100000  # 1MB address space per device
+
+# Create QEMU component
+qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
+params = {
+    "clock": "1GHz",
+    "binary_path": "/path/to/program.elf",
+    "qemu_path": "/home/user/local/qemu-sst/bin/qemu-system-riscv32",
+    "num_devices": NUM_DEVICES
+}
+
+# Dynamically generate device parameters
+for i in range(NUM_DEVICES):
+    addr = BASE_ADDR + (i * ADDR_STRIDE)
+    params[f"device{i}_base"] = f"0x{addr:x}"
+    params[f"device{i}_size"] = 4096
+    params[f"device{i}_name"] = f"accel_{i}"
+
+qemu.addParams(params)
+
+# Create device components
+devices = []
+for i in range(NUM_DEVICES):
+    dev = sst.Component(f"accel_{i}", "acalsim.ComputeDevice")
+    dev.addParams({
+        "clock": "1GHz",
+        "latency": 10 + (i * 5),  # Variable latency per device
+        "compute_units": 16
+    })
+    devices.append(dev)
+
+    # Create link
+    link = sst.Link(f"link_{i}")
+    link.connect(
+        (qemu, f"device_port_{i}", "1ns"),
+        (dev, "cpu_port", "1ns")
+    )
+
+sst.setProgramOption("stop-at", "10ms")
+```
+
+### Pattern 2: Heterogeneous Device Mix
+
+**Example**: Different device types with varying characteristics
+
+```python
+import sst
+
+# Device type database
+DEVICE_CONFIGS = [
+    {
+        "type": "acalsim.EchoDevice",
+        "name": "echo",
+        "base": 0x10200000,
+        "params": {"latency": 10, "buffer_size": 256}
+    },
+    {
+        "type": "acalsim.ComputeDevice",
+        "name": "compute",
+        "base": 0x10300000,
+        "params": {"latency": 100, "compute_units": 32}
+    },
+    {
+        "type": "acalsim.MemoryDevice",
+        "name": "memory",
+        "base": 0x10400000,
+        "params": {"latency": 50, "size_kb": 1024}
+    },
+    {
+        "type": "acalsim.NPUDevice",
+        "name": "npu",
+        "base": 0x10500000,
+        "params": {"latency": 200, "mac_units": 256}
+    }
+]
+
+# Create QEMU component
+qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
+params = {
+    "clock": "2GHz",
+    "binary_path": "/path/to/heterogeneous_test.elf",
+    "qemu_path": "/home/user/local/qemu-sst/bin/qemu-system-riscv32",
+    "num_devices": len(DEVICE_CONFIGS)
+}
+
+# Configure devices from database
+for i, config in enumerate(DEVICE_CONFIGS):
+    # QEMU device parameters
+    params[f"device{i}_base"] = f"0x{config['base']:x}"
+    params[f"device{i}_size"] = 4096
+    params[f"device{i}_name"] = config["name"]
+
+    # Create SST device component
+    dev = sst.Component(config["name"], config["type"])
+    dev_params = {"clock": "2GHz"}
+    dev_params.update(config["params"])
+    dev.addParams(dev_params)
+
+    # Connect to QEMU
+    link = sst.Link(f"link_{i}")
+    link.connect(
+        (qemu, f"device_port_{i}", "1ns"),
+        (dev, "cpu_port", "1ns")
+    )
+
+qemu.addParams(params)
+sst.setProgramOption("stop-at", "100ms")
+```
+
+### Pattern 3: Configuration from External File
+
+**Example**: Read device configuration from JSON file
+
+**devices.json**:
+```json
+{
+  "devices": [
+    {"type": "acalsim.GPU", "name": "gpu0", "base": "0x20000000", "cores": 128},
+    {"type": "acalsim.NPU", "name": "npu0", "base": "0x30000000", "macs": 512},
+    {"type": "acalsim.DSP", "name": "dsp0", "base": "0x40000000", "simd": 16}
+  ]
+}
+```
+
+**config.py**:
+```python
+import sst
+import json
 import os
 
-# Component: QEMU
-qemu = sst.Component("qemu0", "qemubinary.QEMUBinary")
+# Read configuration from JSON
+config_file = os.getenv("DEVICE_CONFIG", "devices.json")
+with open(config_file, 'r') as f:
+    config = json.load(f)
+
+devices_list = config["devices"]
+
+# Create QEMU component
+qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
+params = {
+    "clock": "1GHz",
+    "binary_path": os.getenv("BINARY_PATH", "test.elf"),
+    "qemu_path": os.getenv("QEMU_PATH", "qemu-system-riscv32"),
+    "num_devices": len(devices_list)
+}
+
+# Build from JSON configuration
+for i, dev_cfg in enumerate(devices_list):
+    # QEMU parameters
+    params[f"device{i}_base"] = dev_cfg["base"]
+    params[f"device{i}_size"] = 4096
+    params[f"device{i}_name"] = dev_cfg["name"]
+
+    # Create component
+    dev = sst.Component(dev_cfg["name"], dev_cfg["type"])
+    dev.addParams({
+        "clock": "1GHz",
+        **{k: v for k, v in dev_cfg.items() if k not in ["type", "name", "base"]}
+    })
+
+    # Link
+    link = sst.Link(f"link_{i}")
+    link.connect(
+        (qemu, f"device_port_{i}", "1ns"),
+        (dev, "cpu_port", "1ns")
+    )
+
+qemu.addParams(params)
+```
+
+**Usage**:
+```bash
+DEVICE_CONFIG=gpus.json BINARY_PATH=gpu_test.elf sst config.py
+```
+
+### Pattern 4: Multi-Server Topology
+
+**Example**: Deploy QEMU on rank 0, devices distributed across ranks
+
+```python
+import sst
+
+rank = sst.getMPIRank()
+num_ranks = sst.getNumRanks()
+
+if rank == 0:
+    # Rank 0: QEMU + local devices
+    qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
+    qemu.addParams({
+        "clock": "1GHz",
+        "binary_path": "distributed_test.elf",
+        "qemu_path": "qemu-system-riscv32",
+        "num_devices": 4
+    })
+
+    # Local devices (rank 0) - low latency
+    for i in range(2):
+        dev = sst.Component(f"local_dev_{i}", "acalsim.FastDevice")
+        dev.addParams({"clock": "2GHz", "latency": 10})
+
+        link = sst.Link(f"link_{i}")
+        link.connect(
+            (qemu, f"device_port_{i}", "1ns"),     # Local: 1ns latency
+            (dev, "cpu_port", "1ns")
+        )
+
+    # Remote devices (rank 1) - higher latency due to network
+    for i in range(2, 4):
+        dev = sst.Component(f"remote_dev_{i}", "acalsim.SlowDevice")
+        dev.addParams({"clock": "1GHz", "latency": 100})
+
+        link = sst.Link(f"link_{i}")
+        link.connect(
+            (qemu, f"device_port_{i}", "100ns"),   # Network: 100ns latency
+            (dev, "cpu_port", "100ns")
+        )
+
+elif rank == 1:
+    # Rank 1: Only remote devices (created by rank 0 link)
+    for i in range(2, 4):
+        dev = sst.Component(f"remote_dev_{i}", "acalsim.SlowDevice")
+        dev.addParams({"clock": "1GHz", "latency": 100})
+
+        link = sst.Link(f"link_{i}")
+        link.connect(
+            (dev, "cpu_port", "100ns")
+        )
+
+sst.setProgramOption("stop-at", "1s")
+```
+
+**Launch**:
+```bash
+# Create hostfile
+cat > hostfile <<EOF
+192.168.100.178 slots=1
+192.168.100.69 slots=1
+EOF
+
+# Run distributed simulation
+mpirun -np 2 --hostfile hostfile sst distributed_config.py
+```
+
+### Pattern 5: Advanced Memory Hierarchy Integration
+
+**Example**: Connect QEMU to cache hierarchy instead of direct device access
+
+```python
+import sst
+
+# QEMU component
+qemu = sst.Component("qemu", "qemubinary.QEMUBinary")
 qemu.addParams({
-    "clock":       "1GHz",
-    "verbose":     "2",
-    "binary_path": "/path/to/test.elf",
-    "qemu_path":   "/usr/local/bin/qemu-system-riscv32",
-    "socket_path": "/tmp/qemu-sst-mmio.sock",
-    "device_base": "0x10200000",
+    "clock": "2GHz",
+    "binary_path": "cache_test.elf",
+    "num_devices": 2
 })
 
-# Component: Device
-device = sst.Component("device0", "acalsim.QEMUDevice")
-device.addParams({
-    "clock":        "1GHz",
-    "base_addr":    "0x10200000",
-    "size":         "4096",
-    "verbose":      "1",
+# L1 Cache
+l1_cache = sst.Component("l1_cache", "memHierarchy.Cache")
+l1_cache.addParams({
+    "cache_frequency": "2GHz",
+    "cache_size": "32KiB",
+    "associativity": 4,
+    "access_latency_cycles": 1,
+    "cache_line_size": 64,
+    "replacement_policy": "lru"
 })
 
-# Link components
-link = sst.Link("qemu_device_link")
-link.connect((qemu, "device_port", "1ns"),
-             (device, "cpu_port", "1ns"))
+# L2 Cache
+l2_cache = sst.Component("l2_cache", "memHierarchy.Cache")
+l2_cache.addParams({
+    "cache_frequency": "2GHz",
+    "cache_size": "256KiB",
+    "associativity": 8,
+    "access_latency_cycles": 10,
+    "cache_line_size": 64,
+    "replacement_policy": "lru",
+    "mshr_num_entries": 8
+})
 
-# Simulation settings
-sst.setProgramOption("timebase", "1ps")
-sst.setProgramOption("stop-at", "1ms")
-```
+# Memory Controller
+memory = sst.Component("memory", "memHierarchy.MemController")
+memory.addParams({
+    "clock": "1GHz",
+    "backing": "none",
+    "backend.mem_size": "512MiB",
+    "backend.access_time": "100ns"
+})
 
-### Step 7: Build and Test
+# Connect cache hierarchy
+link_l1_l2 = sst.Link("link_l1_l2")
+link_l1_l2.connect(
+    (l1_cache, "low_network_0", "1ns"),
+    (l2_cache, "high_network_0", "1ns")
+)
 
-**7.1 Build All Components**
+link_l2_mem = sst.Link("link_l2_mem")
+link_l2_mem.connect(
+    (l2_cache, "low_network_0", "10ns"),
+    (memory, "direct_link", "10ns")
+)
 
-```bash
-# Build firmware
-cd riscv-programs
-make clean && make
+# Connect QEMU to L1 instead of direct device access
+# (Requires QEMUBinaryComponent to have cache_link port)
+link_qemu_l1 = sst.Link("link_qemu_l1")
+link_qemu_l1.connect(
+    (qemu, "cache_link", "1ns"),
+    (l1_cache, "high_network_0", "1ns")
+)
 
-# Build SST components
-cd ../qemu-binary
-make clean && make && make install
+# Devices still connected normally
+for i in range(2):
+    dev = sst.Component(f"device_{i}", "acalsim.GenericDevice")
+    dev.addParams({"clock": "1GHz"})
 
-cd ../acalsim-device
-make clean && make && make install
-```
-
-**7.2 Verify Installation**
-
-```bash
-sst-info qemubinary
-sst-info acalsim
-```
-
-**7.3 Run Test**
-
-```bash
-sst qemu_binary_test.py
+    link = sst.Link(f"link_dev_{i}")
+    link.connect(
+        (qemu, f"device_port_{i}", "1ns"),
+        (dev, "cpu_port", "1ns")
+    )
 ```
 
 ---
 
-## Protocol Design
+## Device Development Guide
 
-### Design Principles
+### Creating a Custom SST Device Component
 
-**1. Fixed-Size Structures**
-- Predictable memory layout
-- Fast serialization/deserialization
-- No dynamic allocation
+**Step 1: Header File** (`MyDevice.hh`)
 
-**2. Magic Numbers**
-- Detect protocol errors early
-- Distinguish request/response
-- Validate data integrity
+```cpp
+#ifndef _MY_DEVICE_HH
+#define _MY_DEVICE_HH
 
-**3. Explicit Types**
-- No ambiguity in operation type
-- Type-safe handling
-- Easy to extend
+#include <sst/core/component.h>
+#include <sst/core/link.h>
+#include <sst/core/event.h>
+#include <queue>
 
-**4. Packed Structures**
-- No padding waste
-- Consistent across compilers
-- Portable binary format
+namespace AcalSim {
 
-### Protocol Evolution
+class MyDevice : public SST::Component {
+public:
+    MyDevice(SST::ComponentId_t id, SST::Params& params);
+    ~MyDevice();
 
-**Version 1.0 (Current)**:
-```c
-struct MMIORequest {
-    uint32_t magic;
-    uint32_t type;
-    uint64_t address;
-    uint32_t size;
-    uint64_t data;
-} __attribute__((packed));  // 24 bytes
+    void setup() override;
+    void finish() override;
+
+    bool clockTick(SST::Cycle_t cycle);
+    void handleCPURequest(SST::Event* event);
+
+    // SST ELI macros
+    SST_ELI_REGISTER_COMPONENT(
+        MyDevice,
+        "acalsim",
+        "MyDevice",
+        SST_ELI_ELEMENT_VERSION(1,0,0),
+        "Custom accelerator device",
+        COMPONENT_CATEGORY_UNCATEGORIZED
+    )
+
+    SST_ELI_DOCUMENT_PARAMS(
+        {"clock", "Clock frequency", "1GHz"},
+        {"latency", "Operation latency in cycles", "10"},
+        {"buffer_size", "Internal buffer size", "256"}
+    )
+
+    SST_ELI_DOCUMENT_PORTS(
+        {"cpu_port", "Port to QEMU CPU", {}}
+    )
+
+    SST_ELI_DOCUMENT_STATISTICS(
+        {"read_requests", "Number of read requests", "requests", 1},
+        {"write_requests", "Number of write requests", "requests", 1},
+        {"total_latency", "Total processing latency", "cycles", 1}
+    )
+
+private:
+    struct PendingRequest {
+        DeviceEvent::Type type;
+        uint64_t address;
+        uint64_t data;
+    };
+
+    uint32_t latency_;
+    uint32_t buffer_size_;
+
+    SST::Link* cpu_link_;
+    std::queue<PendingRequest> pending_requests_;
+    uint64_t cycles_until_ready_;
+
+    // Statistics
+    SST::Statistic<uint64_t>* stat_reads_;
+    SST::Statistic<uint64_t>* stat_writes_;
+    SST::Statistic<uint64_t>* stat_latency_;
+
+    SST::Output output_;
+    SST::TimeConverter* clock_tc_;
+};
+
+} // namespace AcalSim
+
+#endif
 ```
 
-**Version 2.0 (Future)**:
-```c
-struct MMIORequestV2 {
-    uint32_t magic;
-    uint32_t version;     // Protocol version
-    uint32_t type;
-    uint32_t flags;       // Operation flags
-    uint64_t address;
-    uint32_t size;
-    uint32_t tag;         // Transaction tag
-    uint64_t data;
-    uint32_t checksum;    // Data integrity
-} __attribute__((packed));  // 40 bytes
+**Step 2: Implementation** (`MyDevice.cc`)
+
+```cpp
+#include "MyDevice.hh"
+#include "DeviceEvent.hh"
+
+using namespace AcalSim;
+
+MyDevice::MyDevice(SST::ComponentId_t id, SST::Params& params)
+    : SST::Component(id)
+{
+    output_.init("MyDevice[@p:@l]: ", 1, 0, SST::Output::STDOUT);
+
+    latency_ = params.find<uint32_t>("latency", 10);
+    buffer_size_ = params.find<uint32_t>("buffer_size", 256);
+
+    std::string clock_freq = params.find<std::string>("clock", "1GHz");
+    clock_tc_ = registerClock(
+        clock_freq,
+        new SST::Clock::Handler<MyDevice>(this, &MyDevice::clockTick)
+    );
+
+    cpu_link_ = configureLink(
+        "cpu_port",
+        new SST::Event::Handler<MyDevice>(this, &MyDevice::handleCPURequest)
+    );
+
+    if (!cpu_link_) {
+        output_.fatal(CALL_INFO, -1, "Failed to configure cpu_port\n");
+    }
+
+    stat_reads_ = registerStatistic<uint64_t>("read_requests");
+    stat_writes_ = registerStatistic<uint64_t>("write_requests");
+    stat_latency_ = registerStatistic<uint64_t>("total_latency");
+
+    cycles_until_ready_ = 0;
+
+    output_.verbose(CALL_INFO, 1, 0, "Initialized with latency=%u\n", latency_);
+}
+
+MyDevice::~MyDevice() {}
+
+void MyDevice::setup() {
+    output_.verbose(CALL_INFO, 1, 0, "Setup complete\n");
+}
+
+void MyDevice::finish() {
+    output_.verbose(CALL_INFO, 1, 0, "Finishing\n");
+}
+
+bool MyDevice::clockTick(SST::Cycle_t cycle) {
+    if (cycles_until_ready_ > 0) {
+        cycles_until_ready_--;
+        return false;
+    }
+
+    if (!pending_requests_.empty()) {
+        PendingRequest req = pending_requests_.front();
+        pending_requests_.pop();
+
+        cycles_until_ready_ = latency_;
+
+        // Send response
+        DeviceEvent* resp = new DeviceEvent(req.type, req.address, req.data);
+        cpu_link_->send(resp);
+
+        stat_latency_->addData(latency_);
+    }
+
+    return false;
+}
+
+void MyDevice::handleCPURequest(SST::Event* event) {
+    DeviceEvent* dev_event = dynamic_cast<DeviceEvent*>(event);
+
+    if (!dev_event) {
+        output_.fatal(CALL_INFO, -1, "Invalid event type\n");
+    }
+
+    if (dev_event->getType() == DeviceEvent::READ) {
+        stat_reads_->addData(1);
+    } else {
+        stat_writes_->addData(1);
+    }
+
+    PendingRequest req;
+    req.type = dev_event->getType();
+    req.address = dev_event->getAddress();
+    req.data = dev_event->getData();
+
+    pending_requests_.push(req);
+
+    delete event;
+}
 ```
 
-### Error Handling
+**Step 3: Makefile**
 
-**Error Detection**:
-```c
-// Validate request
-if (req.magic != MMIO_MAGIC_REQUEST) {
-    return ERROR_INVALID_MAGIC;
-}
+```makefile
+CXX = $(shell sst-config --CXX)
+CXXFLAGS = $(shell sst-config --ELEMENT_CXXFLAGS)
+CXXFLAGS += -std=c++14 -g -O2
+LDFLAGS = $(shell sst-config --ELEMENT_LDFLAGS)
 
-if (req.size != 1 && req.size != 2 &&
-    req.size != 4 && req.size != 8) {
-    return ERROR_INVALID_SIZE;
-}
+SOURCES = MyDevice.cc DeviceEvent.cc
+HEADERS = MyDevice.hh DeviceEvent.hh
+TARGET = libmydevice.so
 
-if (req.type != MMIO_TYPE_READ &&
-    req.type != MMIO_TYPE_WRITE) {
-    return ERROR_INVALID_TYPE;
-}
+all: $(TARGET)
+
+$(TARGET): $(SOURCES:.cc=.o)
+	$(CXX) $(LDFLAGS) -shared -o $@ $^
+
+%.o: %.cc $(HEADERS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+install: $(TARGET)
+	install -D $(TARGET) $(shell sst-config --prefix)/lib/sstcore/$(TARGET)
+
+clean:
+	rm -f *.o $(TARGET)
+
+.PHONY: all install clean
 ```
 
-**Error Responses**:
+---
+
+## QEMU Integration Details
+
+### sst-device.c Implementation
+
+**File**: qemu-sst-device/sst-device.c
+
+Key functions:
+
 ```c
-MMIOResponse error_resp = {
-    .magic = MMIO_MAGIC_RESPONSE,
-    .status = ERROR_INVALID_ADDRESS,
-    .data = 0,
-    .latency = 0,
+// Device state
+typedef struct {
+    SysBusDevice parent_obj;
+    MemoryRegion mmio;
+    int socket_fd;
+    char *socket_path;
+    uint64_t base_address;  // Global base address
+} SSTDeviceState;
+
+// MMIO read operation
+static uint64_t sst_device_read(void *opaque, hwaddr offset, unsigned size) {
+    SSTDeviceState *s = SST_DEVICE(opaque);
+
+    MMIORequest req;
+    req.type = 0;  // READ
+    req.addr = s->base_address + offset;  // Send GLOBAL address
+    req.data = 0;
+
+    send(s->socket_fd, &req, sizeof(req), 0);
+
+    MMIOResponse resp;
+    recv(s->socket_fd, &resp, sizeof(resp), MSG_WAITALL);
+
+    return resp.success ? resp.data : 0;
+}
+
+// MMIO write operation
+static void sst_device_write(void *opaque, hwaddr offset,
+                             uint64_t value, unsigned size) {
+    SSTDeviceState *s = SST_DEVICE(opaque);
+
+    MMIORequest req;
+    req.type = 1;  // WRITE
+    req.addr = s->base_address + offset;  // Send GLOBAL address
+    req.data = value;
+
+    send(s->socket_fd, &req, sizeof(req), 0);
+
+    MMIOResponse resp;
+    recv(s->socket_fd, &resp, sizeof(resp), MSG_WAITALL);
+}
+
+// Property definitions
+static Property sst_device_properties[] = {
+    DEFINE_PROP_STRING("socket", SSTDeviceState, socket_path),
+    DEFINE_PROP_UINT64("base_address", SSTDeviceState, base_address, 0),
+    DEFINE_PROP_END_OF_LIST(),
 };
 ```
 
----
+**Why Global Addresses**:
+- Each sst-device knows its global base address (set by virt machine)
+- Sends `base_address + offset` to SST
+- SST routes by global address to correct device
+- Enables true address-based routing
 
-## Integration Points
+### virt.c Integration (N-Device Support)
 
-### 1. QEMU-SST Interface
+**File**: hw/riscv/virt.c (lines 948-989)
 
-**Socket Connection**:
-- QEMU device (client) connects to SST component (server)
-- Unix domain sockets for local IPC
-- Non-blocking I/O for polling
-- Automatic reconnection on failure
+```c
+/* SST integration device(s) - support N devices via environment variables */
+const char *num_devices_str = getenv("SST_NUM_DEVICES");
+int num_sst_devices = num_devices_str ? atoi(num_devices_str) : 1;
 
-**Data Flow**:
-```
-QEMU Device Thread → Socket → SST Clock Handler → Device Event Handler
-                              ↓
-Device Response ← Socket ← SST Event Response ← Device Component
-```
+if (num_sst_devices < 1) num_sst_devices = 1;
+if (num_sst_devices > 16) num_sst_devices = 16;
 
-### 2. SST Component Interface
+for (int dev_idx = 0; dev_idx < num_sst_devices; dev_idx++) {
+    char env_socket[64], env_base[64];
+    snprintf(env_socket, sizeof(env_socket), "SST_DEVICE%d_SOCKET", dev_idx);
+    snprintf(env_base, sizeof(env_base), "SST_DEVICE%d_BASE", dev_idx);
 
-**Component Ports**:
-```cpp
-// Outgoing port (to device)
-SST::Link *device_port = configureLink("device_port", handler);
-device_port->send(event);
+    const char *socket_path = getenv(env_socket);
+    const char *base_str = getenv(env_base);
 
-// Incoming port (from device)
-void handleResponse(SST::Event *ev) {
-    // Process response
+    // Defaults
+    char default_socket[128];
+    if (!socket_path) {
+        snprintf(default_socket, sizeof(default_socket),
+                 "/tmp/qemu-sst-device%d.sock", dev_idx);
+        socket_path = default_socket;
+    }
+
+    uint64_t base_addr = base_str ? strtoul(base_str, NULL, 0) :
+                         (0x10200000 + dev_idx * 0x100000);
+
+    // Create device
+    DeviceState *sst_dev = qdev_new("sst-device");
+    qdev_prop_set_string(sst_dev, "socket", socket_path);
+    qdev_prop_set_uint64(sst_dev, "base_address", base_addr);
+
+    // Realize and map
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(sst_dev), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(sst_dev), 0, base_addr);
+
+    printf("SST Device %d: socket=%s, base=0x%lx\n",
+           dev_idx, socket_path, base_addr);
 }
 ```
 
-**Event Types**:
-- MemoryTransactionEvent: CPU → Device
-- MemoryResponseEvent: Device → CPU
+---
 
-### 3. RISC-V Memory Interface
+## Debugging and Profiling
 
-**Memory-Mapped Registers**:
-```c
-#define SST_DEVICE_BASE     0x10200000
-#define SST_REG_DATA_IN     (*(volatile uint32_t *)(SST_DEVICE_BASE + 0x00))
-#define SST_REG_DATA_OUT    (*(volatile uint32_t *)(SST_DEVICE_BASE + 0x04))
-#define SST_REG_STATUS      (*(volatile uint32_t *)(SST_DEVICE_BASE + 0x08))
-#define SST_REG_CONTROL     (*(volatile uint32_t *)(SST_DEVICE_BASE + 0x0C))
+### Debugging SST Components
+
+**Enable Verbose Output**:
+```python
+qemu.addParams({
+    "verbose": 3,  # 0=off, 1=info, 2=debug, 3=trace
+})
 ```
 
-**Access Pattern**:
-```c
-// Write operation
-SST_REG_DATA_IN = 0xDEADBEEF;    // MMIO write → QEMU → SST
-SST_REG_CONTROL = 0x1;           // Trigger operation
+**GDB Debugging**:
+```bash
+gdb --args sst test_config.py
 
-// Read operation
-while (SST_REG_STATUS & 0x1);    // Poll until ready
-uint32_t result = SST_REG_DATA_OUT;  // MMIO read → QEMU → SST
+(gdb) break QEMUBinaryComponent::handleMMIORequest
+(gdb) run
+(gdb) print dev->name
+(gdb) print req.addr
+```
+
+**Attach to QEMU**:
+```bash
+ps aux | grep qemu-system-riscv32
+gdb -p <PID>
+(gdb) break sst_device_read
+```
+
+### Socket Debugging
+
+**Monitor Socket Traffic**:
+```bash
+strace -e trace=socket,connect,accept,send,recv sst config.py 2>&1 | grep qemu-sst
+
+ls -la /tmp/qemu-sst-device*.sock
+
+# Test socket manually
+echo -ne '\x00\x00\x00\x10\x20\x00\x00\x00\x00\x00\x00\x00' | nc -U /tmp/qemu-sst-device0.sock | hexdump -C
+```
+
+### Performance Profiling
+
+**SST Statistics**:
+```python
+sst.setStatisticLoadLevel(7)
+sst.setStatisticOutput("sst.statOutputCSV")
+sst.setStatisticOutputOptions({"filepath": "stats.csv"})
+
+qemu.enableAllStatistics()
+device.enableAllStatistics()
+```
+
+**Perf Profiling**:
+```bash
+perf record -g sst test_config.py
+perf report
+
+perf stat -e cache-references,cache-misses sst config.py
+```
+
+---
+
+## Performance Optimization
+
+### Socket Performance (Large N)
+
+**Current**: O(N) polling per clock tick
+
+**Optimization**: Use `select()` for N > 16
+
+```cpp
+void QEMUBinaryComponent::pollDeviceSockets() {
+    if (devices_.size() > 16) {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        int max_fd = 0;
+
+        for (auto& dev : devices_) {
+            if (dev.socket_ready && dev.client_fd >= 0) {
+                FD_SET(dev.client_fd, &readfds);
+                max_fd = std::max(max_fd, dev.client_fd);
+            }
+        }
+
+        struct timeval timeout = {0, 0};
+        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
+
+        if (ready > 0) {
+            for (auto& dev : devices_) {
+                if (FD_ISSET(dev.client_fd, &readfds)) {
+                    handleMMIORequest(&dev);
+                }
+            }
+        }
+    } else {
+        // Original O(N) loop
+        for (auto& dev : devices_) {
+            if (dev.socket_ready) handleMMIORequest(&dev);
+        }
+    }
+}
+```
+
+### Hash Map Routing (O(1) Lookup)
+
+```cpp
+// In header
+std::unordered_map<uint64_t, DeviceInfo*> addr_to_device_;
+
+// In constructor
+for (auto& dev : devices_) {
+    addr_to_device_[dev.base_addr] = &dev;
+}
+
+// O(1) lookup
+DeviceInfo* QEMUBinaryComponent::findDeviceByAddress(uint64_t addr) {
+    uint64_t base = (addr / 0x100000) * 0x100000;  // Round to 1MB
+    auto it = addr_to_device_.find(base);
+    return (it != addr_to_device_.end()) ? it->second : nullptr;
+}
 ```
 
 ---
 
 ## Advanced Topics
 
-### 1. Performance Optimization
+### Checkpoint/Restart Support
 
-**Batching Requests**:
-```c
-// Instead of individual requests
-for (int i = 0; i < 100; i++) {
-    MMIORequest req = {...};
-    send(fd, &req, sizeof(req), 0);
-    recv(fd, &resp, sizeof(resp), 0);  // Wait each time
-}
-
-// Batch multiple requests
-MMIORequest reqs[100];
-for (int i = 0; i < 100; i++) {
-    reqs[i] = {...};
-}
-send(fd, reqs, sizeof(reqs), 0);  // Send all at once
-
-// Receive responses
-MMIOResponse resps[100];
-recv(fd, resps, sizeof(resps), 0);
-```
-
-**Asynchronous Processing**:
 ```cpp
-// Queue requests
-std::queue<MMIORequest> pending_requests;
+void QEMUBinaryComponent::serialize_order(
+    SST::Core::Serialization::serializer& ser) override
+{
+    Component::serialize_order(ser);
+    ser& devices_;
+    ser& qemu_pid_;
+    ser& use_multi_device_;
 
-// Process in clock handler
-bool clockTick(SST::Cycle_t cycle) {
-    // Send queued requests
-    while (!pending_requests.empty()) {
-        auto& req = pending_requests.front();
-        device_port->send(createEvent(req));
-        pending_requests.pop();
+    for (auto& dev : devices_) {
+        ser& dev.num_requests;
+        ser& dev.socket_ready;
     }
-
-    // Receive responses (non-blocking)
-    handleResponses();
-
-    return false;
 }
 ```
 
-### 2. Multi-Device Support
+### Multi-Threaded QEMU
 
-**Device Addressing**:
-```c
-// Device 1: 0x10200000 - 0x10200FFF
-// Device 2: 0x10300000 - 0x10300FFF
+```cpp
+// Add mutex to DeviceInfo
+std::mutex socket_mutex;
 
-if (address >= 0x10200000 && address < 0x10201000) {
-    route_to_device1(req);
-} else if (address >= 0x10300000 && address < 0x10301000) {
-    route_to_device2(req);
+void QEMUBinaryComponent::handleMMIORequest(DeviceInfo* dev) {
+    std::lock_guard<std::mutex> lock(dev->socket_mutex);
+    // ... socket I/O
 }
-```
-
-**SST Configuration**:
-```python
-device1 = sst.Component("device1", "acalsim.Device1")
-device2 = sst.Component("device2", "acalsim.Device2")
-
-# Connect both to QEMU
-link1 = sst.Link("link1")
-link1.connect((qemu, "device1_port", "1ns"),
-              (device1, "cpu_port", "1ns"))
-
-link2 = sst.Link("link2")
-link2.connect((qemu, "device2_port", "1ns"),
-              (device2, "cpu_port", "1ns"))
-
-# Inter-device communication
-inter_link = sst.Link("inter_link")
-inter_link.connect((device1, "peer_port", "10ns"),
-                   (device2, "peer_port", "10ns"))
-```
-
-### 3. Cycle-Accurate Timing
-
-**Latency Modeling**:
-```cpp
-void handleMMIORead(uint64_t address) {
-    // Calculate latency based on address
-    uint32_t latency_cycles;
-    if (address < 0x10200010) {
-        latency_cycles = 1;  // Register access
-    } else {
-        latency_cycles = 100;  // Memory access
-    }
-
-    // Schedule response event
-    MemoryResponseEvent *resp = new MemoryResponseEvent(data);
-    resp->latency = latency_cycles;
-    cpu_port->send(resp, latency_cycles);  // Delayed delivery
-}
-```
-
-**Clock Domain Crossing**:
-```cpp
-// QEMU clock: 1 GHz
-// Device clock: 500 MHz (2x slower)
-
-device = sst.Component("device0", "acalsim.SlowDevice")
-device.addParams({
-    "clock": "500MHz",  // Different clock domain
-})
-
-// SST handles clock domain crossing automatically
-// Events are delivered at appropriate simulation time
-```
-
-### 4. Debugging and Instrumentation
-
-**Verbose Output**:
-```cpp
-if (verbose > 0) {
-    getSimulationOutput().output("MMIO READ: addr=0x%lx size=%u\n",
-                                 address, size);
-}
-
-if (verbose > 1) {
-    getSimulationOutput().output("  Device latency: %u cycles\n",
-                                 latency);
-}
-
-if (verbose > 2) {
-    getSimulationOutput().output("  Data: 0x%lx\n", data);
-    getSimulationOutput().output("  Timestamp: %lu\n",
-                                 getCurrentSimCycle());
-}
-```
-
-**Statistics Collection**:
-```cpp
-// Register statistics
-stat_read_latency = registerStatistic<uint64_t>("read_latency");
-stat_write_latency = registerStatistic<uint64_t>("write_latency");
-stat_bandwidth = registerStatistic<uint64_t>("bandwidth");
-
-// Record data
-stat_read_latency->addData(latency);
-stat_bandwidth->addData(size);
-```
-
-**Event Tracing**:
-```cpp
-// Enable tracing in SST configuration
-sst.enableAllStatisticsForAllComponents()
-sst.setStatisticLoadLevel(7)
-sst.setStatisticOutput("sst.statOutputCSV")
-sst.setStatisticOutputOptions({"filepath": "stats.csv"})
-```
-
----
-
-## Best Practices
-
-### 1. Code Organization
-
-**Directory Structure**:
-```
-project/
-├── firmware/          # RISC-V bare-metal code
-│   ├── crt0.S        # Runtime startup
-│   ├── tests/        # Test programs
-│   └── lib/          # Common libraries
-├── qemu-device/      # QEMU device implementation
-│   ├── sst-device.c
-│   └── sst-device.h
-├── sst-components/   # SST components
-│   ├── qemu-binary/
-│   └── devices/
-└── docs/             # Documentation
-```
-
-### 2. Error Handling
-
-**Graceful Degradation**:
-```cpp
-if (device_port->send(event) == false) {
-    getSimulationOutput().output(CALL_INFO,
-        "Warning: Failed to send event, queuing for retry\n");
-    retry_queue.push(event);
-    return;
-}
-```
-
-**Timeout Handling**:
-```cpp
-auto start_time = std::chrono::steady_clock::now();
-while (true) {
-    if (try_operation()) {
-        break;
-    }
-    auto elapsed = std::chrono::steady_clock::now() - start_time;
-    if (elapsed > std::chrono::seconds(5)) {
-        getSimulationOutput().fatal(CALL_INFO, -1,
-            "Operation timed out after 5 seconds\n");
-    }
-    usleep(10000);  // 10ms
-}
-```
-
-### 3. Testing Strategy
-
-**Unit Tests**:
-- Test each component independently
-- Use mock interfaces for dependencies
-- Validate protocol encoding/decoding
-
-**Integration Tests**:
-- Test full QEMU-SST communication
-- Verify timing and latency
-- Check error handling paths
-
-**Regression Tests**:
-- Maintain test suite for each phase
-- Automate testing in CI/CD
-- Track performance metrics
-
-### 4. Documentation
-
-**Code Documentation**:
-```cpp
-/**
- * Handles MMIO read request from QEMU.
- *
- * @param address Physical address to read from
- * @param size Access size (1, 2, 4, or 8 bytes)
- * @return Data value read from device
- *
- * This function:
- * 1. Validates the request parameters
- * 2. Creates a MemoryTransactionEvent
- * 3. Sends event to device component
- * 4. Waits for response
- * 5. Returns data to QEMU
- *
- * Timing: 1-100 cycles depending on device latency
- */
-uint64_t handleMMIORead(uint64_t address, uint32_t size);
-```
-
-**Design Documentation**:
-- Architecture diagrams
-- Sequence diagrams
-- State machine diagrams
-- Protocol specifications
-
-**User Documentation**:
-- Quick start guide
-- Build instructions
-- Troubleshooting guide
-- API reference
-
-### 5. Version Control
-
-**Commit Messages**:
-```
-feat: Add binary MMIO protocol support
-
-- Implement MMIORequest/MMIOResponse structures
-- Add socket-based communication
-- Update QEMU device to use binary protocol
-- Performance improvement: 10x throughput
-
-Addresses: #123
-```
-
-**Branching Strategy**:
-```
-main           # Stable releases
-├── develop    # Integration branch
-├── feature/phase2c-binary-protocol
-├── feature/multi-core-support
-└── bugfix/socket-timeout
 ```
 
 ---
 
 ## Conclusion
 
-This guide provides a complete reference for developing the QEMU-SST integration from scratch. Key takeaways:
+This developer guide provides the foundation for understanding, extending, and optimizing the QEMU-AcalSim-SST baremetal simulation infrastructure.
 
-1. **Start Simple**: Begin with minimal implementations and add features incrementally
-2. **Test Early**: Validate each component before integration
-3. **Document Everything**: Code, design, and usage documentation
-4. **Performance Matters**: Profile and optimize critical paths
-5. **Error Handling**: Plan for failures and edge cases
+**Key Takeaways**:
+1. Three-layer architecture enables flexible system simulation
+2. N-device support scales linearly with proper optimization
+3. SST Python configs are full programs, not static files
+4. Per-device sockets provide independent communication
+5. Environment variables enable clean QEMU integration
 
-For user-focused documentation, see `USER_GUIDE.md`.
+**Next Steps**:
+- Review concrete examples in `DEMO_EXAMPLE.md`
+- Study existing device implementations
+- Experiment with custom SST configurations
+- Profile and optimize for your specific use case
 
-For specific build and test instructions, see `BUILD_AND_TEST.md`.
+**Resources**:
+- SST Documentation: https://sst-simulator.org/
+- QEMU Documentation: https://www.qemu.org/docs/
+- RISC-V Specifications: https://riscv.org/specifications/
 
 ---
 
+**Document Version**: 2.0 (Updated for N-Device Support)
 **Last Updated**: 2025-11-10
-**Phase**: 2C (Binary MMIO Protocol)
+**Phase**: 2D - N-Device Integration Complete
 **Status**: Production Ready

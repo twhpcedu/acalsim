@@ -341,28 +341,35 @@ void QEMUBinaryComponent::launchQEMU() {
         args.push_back("-kernel");
         args.push_back(binary_path_.c_str());
 
-        // Add SST devices
-        std::vector<std::string> device_args;
+        // Configure SST devices via environment variables (QEMU virt machine will instantiate them)
         if (use_multi_device_) {
-            // N-device mode: use per-device socket paths
+            // N-device mode: set environment variables for N devices
+            char num_buf[16];
+            snprintf(num_buf, sizeof(num_buf), "%zu", devices_.size());
+            setenv("SST_NUM_DEVICES", num_buf, 1);
+
             for (size_t i = 0; i < devices_.size(); i++) {
+                char env_socket[32], env_base[32];
                 char addr_buf[32];
-                snprintf(addr_buf, sizeof(addr_buf), "0x%lx", devices_[i].base_addr);
-                std::string dev_arg = "sst-device,socket=" + devices_[i].socket_path +
-                                     ",base_address=" + std::string(addr_buf);
-                device_args.push_back(dev_arg);
-                args.push_back("-device");
-                args.push_back(device_args.back().c_str());
+
+                snprintf(env_socket, sizeof(env_socket), "SST_DEVICE%zu_SOCKET", i);
+                snprintf(env_base, sizeof(env_base), "SST_DEVICE%zu_BASE", i);
+                snprintf(addr_buf, sizeof(addr_buf), "%lx", devices_[i].base_addr);
+
+                setenv(env_socket, devices_[i].socket_path.c_str(), 1);
+                setenv(env_base, addr_buf, 1);
+
+                out_.verbose(CALL_INFO, 2, 0, "  %s=%s\n", env_socket, devices_[i].socket_path.c_str());
+                out_.verbose(CALL_INFO, 2, 0, "  %s=0x%s\n", env_base, addr_buf);
             }
         } else if (device_link_) {
             // Legacy single device mode
+            setenv("SST_NUM_DEVICES", "1", 1);
+            setenv("SST_DEVICE0_SOCKET", socket_path_.c_str(), 1);
+
             char addr_buf[32];
-            snprintf(addr_buf, sizeof(addr_buf), "0x%lx", device_base_);
-            std::string dev_arg = "sst-device,socket=" + socket_path_ +
-                                 ",base_address=" + std::string(addr_buf);
-            device_args.push_back(dev_arg);
-            args.push_back("-device");
-            args.push_back(device_args.back().c_str());
+            snprintf(addr_buf, sizeof(addr_buf), "%lx", device_base_);
+            setenv("SST_DEVICE0_BASE", addr_buf, 1);
         }
 
         args.push_back(NULL);
