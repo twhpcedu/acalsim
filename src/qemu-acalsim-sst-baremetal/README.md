@@ -134,7 +134,7 @@ Arithmetic accelerator device:
 
 - RISC-V Toolchain: `riscv64-unknown-elf-gcc`
 - SST-Core installed and in PATH
-- Custom QEMU build with SST device (see PHASE2C_INTEGRATION.md)
+- Custom QEMU build with SST device (see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md))
 - C++17 compiler (g++ or clang)
 
 ### Build and Run
@@ -172,11 +172,13 @@ sst qemu_multi_device_test.py
 ```
 qemu-acalsim-sst-baremetal/
 ├── README.md                           # This file
-├── BUILD_AND_TEST.md                   # Complete build and test guide
-├── USER_GUIDE.md                       # User guide for creating tests and devices
-├── DEVELOPER_GUIDE.md                  # Developer guide with architecture details
-├── MULTI_DEVICE_EXAMPLE.md             # Multi-device communication guide
-├── PHASE2C_INTEGRATION.md              # QEMU device integration guide
+├── GETTING_STARTED.md                  # Complete user guide
+├── DEVELOPER_GUIDE.md                  # Comprehensive developer documentation
+├── DEMO_EXAMPLE.md                     # Concrete working examples
+├── DOCKER.md                           # Docker-specific instructions
+│
+├── docs/                               # Documentation
+│   └── archive/                        # Historical development documents
 │
 ├── riscv-programs/                     # Bare-metal RISC-V test programs
 │   ├── crt0.S                          # C runtime startup
@@ -185,6 +187,7 @@ qemu-acalsim-sst-baremetal/
 │   ├── mmio_test.c                     # Single-device MMIO test
 │   ├── mmio_test_main.c                # Test with proper main()
 │   ├── multi_device_test.c             # Multi-device test
+│   ├── test_4devices.c                 # 4-device scalability test
 │   ├── asm_link_test.c                 # C-assembly linkage test
 │   ├── asm_test.S                      # Assembly test functions
 │   └── Makefile                        # Build system
@@ -193,11 +196,11 @@ qemu-acalsim-sst-baremetal/
 │   ├── sst-device.c                    # QEMU device (integrate into QEMU)
 │   └── sst-device.h                    # Device header
 │
-├── qemu-binary/                        # SST QEMUBinary component
-│   ├── QEMUBinaryComponent.hh          # Component header
-│   ├── QEMUBinaryComponent.cc          # Component implementation
+├── qemu-binary/                        # SST QEMUBinary component (N-device support)
+│   ├── QEMUBinaryComponent.hh          # Component header with DeviceInfo
+│   ├── QEMUBinaryComponent.cc          # N-socket implementation
 │   ├── Makefile                        # Build system
-│   └── README.md                       # Component documentation
+│   └── *.md                            # Implementation documentation
 │
 ├── acalsim-device/                     # SST device components
 │   ├── ACALSimDeviceComponent.hh       # Echo device header
@@ -208,7 +211,8 @@ qemu-acalsim-sst-baremetal/
 │   └── README.md                       # Component documentation
 │
 ├── qemu_binary_test.py                 # SST config: single device test
-└── qemu_multi_device_test.py           # SST config: multi-device test
+├── qemu_multi_device_test.py           # SST config: 2-device test
+└── qemu_4device_test.py                # SST config: 4-device scalability test
 ```
 
 ## Single Device Example
@@ -318,18 +322,22 @@ peer_link.connect((echo_dev, "peer_port", "10ns"),
                   (compute_dev, "peer_port", "10ns"))
 ```
 
-See [MULTI_DEVICE_EXAMPLE.md](MULTI_DEVICE_EXAMPLE.md) for complete details.
+See [DEMO_EXAMPLE.md](DEMO_EXAMPLE.md) for complete details.
 
 ## Documentation
 
-### User Documentation
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Creating custom firmware tests and device models
-- **[BUILD_AND_TEST.md](BUILD_AND_TEST.md)** - Complete build and test instructions
-- **[MULTI_DEVICE_EXAMPLE.md](MULTI_DEVICE_EXAMPLE.md)** - Multi-device communication
+### For Users
+- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Complete user guide covering single/multi-device setup, baremetal programming, assembly integration, MMIO operations, compilation, and multi-server deployment
 
-### Developer Documentation
-- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Architecture, design concepts, step-by-step development
-- **[PHASE2C_INTEGRATION.md](PHASE2C_INTEGRATION.md)** - QEMU device integration details
+### For Developers
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Comprehensive developer documentation including architecture, design concepts, building from scratch, and custom SST Python configurations
+
+### Examples
+- **[DEMO_EXAMPLE.md](DEMO_EXAMPLE.md)** - Concrete working examples for homogeneous and heterogeneous device modeling with complete RISC-V programs
+
+### Additional Resources
+- **[DOCKER.md](DOCKER.md)** - Docker containerization instructions
+- **[docs/archive/](docs/archive/)** - Historical development documents
 
 ## Development Phases
 
@@ -436,23 +444,24 @@ qemu.addParams({"verbose": "3"})
 device.addParams({"verbose": "2"})
 ```
 
-See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for detailed troubleshooting.
+See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed troubleshooting.
 
 ## Adding New Devices
 
 To add a new device systematically:
 
-1. **Create Device Component** (see USER_GUIDE.md)
+1. **Create Device Component** (see [GETTING_STARTED.md](GETTING_STARTED.md) and [DEMO_EXAMPLE.md](DEMO_EXAMPLE.md))
 2. **Define Register Map** (memory-mapped registers)
 3. **Implement Device Logic** (SST component)
 4. **Update SST Configuration** (add device and links)
 5. **Write Test Program** (RISC-V firmware)
 6. **Build and Test**
 
-For N devices, see discussion in MULTI_DEVICE_EXAMPLE.md about:
+For N devices, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for:
+- N-socket architecture and implementation
 - Address-based routing in QEMUBinaryComponent
-- Device router components
-- Systematic device instantiation
+- Scalable device instantiation
+- Performance considerations
 
 ## References
 
