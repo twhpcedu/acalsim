@@ -24,9 +24,9 @@ SST_ELEMENT_DIR = $(SST_INSTALL_DIR)/lib/sstcore
 
 # Component name and files
 COMPONENT_NAME = libacalsim.so
-SOURCES = ACALSimDeviceComponent.cc
+SOURCES = ACALSimDeviceComponent.cc ACALSimComputeDeviceComponent.cc
 OBJECTS = $(SOURCES:.cc=.o)
-HEADERS = ACALSimDeviceComponent.hh
+HEADERS = ACALSimDeviceComponent.hh ACALSimComputeDeviceComponent.hh
 
 # Default target
 all: $(COMPONENT_NAME)
@@ -45,7 +45,9 @@ install: $(COMPONENT_NAME)
 	@mkdir -p $(SST_ELEMENT_DIR)
 	@cp $(COMPONENT_NAME) $(SST_ELEMENT_DIR)/
 	@echo "Installation complete"
-	@echo "You can now use this component in SST with: sst.Component(name, \"acalsim.QEMUDevice\")"
+	@echo "You can now use these components in SST:"
+	@echo "  - sst.Component(name, \"acalsim.QEMUDevice\")      # Echo device"
+	@echo "  - sst.Component(name, \"acalsim.ComputeDevice\")  # Compute device"
 
 # Clean build artifacts
 clean:

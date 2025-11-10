@@ -35,7 +35,8 @@ all: simple_test.elf simple_test.bin simple_test.dump \
      sst_device_test.elf sst_device_test.bin sst_device_test.dump \
      mmio_test.elf mmio_test.bin mmio_test.dump \
      mmio_test_main.elf mmio_test_main.bin mmio_test_main.dump \
-     asm_link_test.elf asm_link_test.bin asm_link_test.dump
+     asm_link_test.elf asm_link_test.bin asm_link_test.dump \
+     multi_device_test.elf multi_device_test.bin multi_device_test.dump
 
 simple_test.elf: start.o simple_test.o linker.ld
 	$(CC) $(CFLAGS) $(LDFLAGS) start.o simple_test.o -o $@
@@ -113,6 +114,19 @@ asm_link_test.o: asm_link_test.c
 asm_test.o: asm_test.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Multi-device test
+multi_device_test.elf: crt0.o multi_device_test.o linker.ld
+	$(CC) $(CFLAGS) $(LDFLAGS) crt0.o multi_device_test.o -o $@
+
+multi_device_test.bin: multi_device_test.elf
+	$(OBJCOPY) -O binary $< $@
+
+multi_device_test.dump: multi_device_test.elf
+	$(OBJDUMP) -d $< > $@
+
+multi_device_test.o: multi_device_test.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
 	rm -f *.o *.elf *.bin *.dump
 
@@ -148,6 +162,15 @@ test-asm: asm_link_test.elf
 	@echo "Press Ctrl-A then X to exit QEMU"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel asm_link_test.elf
 
+# Test multi-device program
+# Note: This test requires SST simulation with both devices configured
+test-multi: multi_device_test.elf
+	@echo "Running multi-device test..."
+	@echo "Note: Requires SST simulation with echo and compute devices"
+	@echo "      Use the qemu_multi_device_test.py SST configuration"
+	@echo "Press Ctrl-A then X to exit QEMU"
+	qemu-system-riscv32 -M virt -bios none -nographic -kernel multi_device_test.elf
+
 # Debug with QEMU
 debug: simple_test.elf
 	@echo "Starting QEMU in debug mode..."
@@ -155,4 +178,4 @@ debug: simple_test.elf
 	@echo "Then run: target remote localhost:1234"
 	qemu-system-riscv32 -M virt -bios none -nographic -kernel simple_test.elf -s -S
 
-.PHONY: all clean test test-sst test-mmio test-main test-asm debug
+.PHONY: all clean test test-sst test-mmio test-main test-asm test-multi debug
