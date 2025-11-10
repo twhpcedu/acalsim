@@ -39,7 +39,7 @@ If using the acalsim-workspace Docker container:
 
 ```bash
 docker exec -it acalsim-workspace bash
-cd /home/user/projects/acalsim/src/qemu-sst
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal
 ```
 
 ---
@@ -50,7 +50,7 @@ For a complete build and test from scratch:
 
 ```bash
 # Navigate to project directory
-cd /path/to/acalsim/src/qemu-sst
+cd /path/to/acalsim/src/qemu-acalsim-sst-baremetal
 
 # 1. Build RISC-V test program
 cd riscv-programs
@@ -236,7 +236,7 @@ ninja install
 **Full end-to-end test with QEMU and SST:**
 
 ```bash
-cd /home/user/projects/acalsim/src/qemu-sst
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal
 
 # Ensure custom QEMU path is set
 export QEMU_PATH=/home/user/qemu-build/install/bin/qemu-system-riscv32
@@ -251,7 +251,7 @@ sst qemu_binary_test.py
 ====================================================================
 QEMU-Binary SST Integration Test - Phase 2C
 ====================================================================
-Binary:      /home/user/projects/acalsim/src/qemu-sst/riscv-programs/mmio_test.elf
+Binary:      /home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/mmio_test.elf
 QEMU:        /home/user/qemu-build/install/bin/qemu-system-riscv32
 Socket:      /tmp/qemu-sst-mmio.sock
 Device base: 0x10200000
@@ -366,7 +366,7 @@ qemu_path = os.environ.get("QEMU_PATH",
 
 # RISC-V test program
 binary_path = os.environ.get("RISCV_BINARY",
-    "/home/user/projects/acalsim/src/qemu-sst/riscv-programs/mmio_test.elf")
+    "/home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/mmio_test.elf")
 
 # Unix socket for communication
 socket_path = "/tmp/qemu-sst-mmio.sock"
@@ -597,7 +597,7 @@ export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
 export QEMU_PATH=/home/user/qemu-build/install/bin/qemu-system-riscv32
 
 # 2. Build all components
-cd /home/user/projects/acalsim/src/qemu-sst
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal
 cd riscv-programs && make clean && make mmio_test.elf && cd ..
 cd qemu-binary && make clean && make && make install && cd ..
 cd acalsim-device && make clean && make && make install && cd ..

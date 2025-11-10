@@ -45,7 +45,7 @@ import os
 
 # Get RISC-V binary path from environment or use default
 binary_path = os.environ.get("RISCV_BINARY",
-    "/home/user/projects/acalsim/src/qemu-sst/riscv-programs/mmio_test.elf")
+    "/home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/mmio_test.elf")
 
 # QEMU path
 qemu_path = os.environ.get("QEMU_PATH", "/home/user/qemu-build/install/bin/qemu-system-riscv32")
