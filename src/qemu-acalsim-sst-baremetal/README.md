@@ -351,7 +351,7 @@ struct MMIOResponse {
 } __attribute__((packed));
 ```
 
-**Performance**: ~10,000 transactions/sec, ~100μs latency (10x improvement over Phase 2B)
+**Performance**: ~10,000 transactions/sec, ~100μs latency (10x improvement over text-based protocols)
 
 ## Shared Library Architecture
 
@@ -705,49 +705,64 @@ See [DEMO_EXAMPLE.md](DEMO_EXAMPLE.md) for complete details.
 - **[DOCKER.md](DOCKER.md)** - Docker containerization instructions
 - **[docs/archive/](docs/archive/)** - Historical development documents
 
-## Development Phases
+## Features and Capabilities
 
-### Phase 2B: Serial Text Protocol ✅ COMPLETE
+### Binary MMIO Protocol
 
-- Text-based serial UART protocol
-- ~1,000 transactions/sec
-- ~1ms latency
-- High CPU overhead (text parsing)
+The framework uses a high-performance binary MMIO protocol for efficient CPU-device communication:
 
-### Phase 2C: Binary MMIO Protocol ✅ COMPLETE
+- **Performance**: ~10,000 transactions/sec with ~100μs latency
+- **Low overhead**: Binary protocol reduces CPU usage by ~90% compared to text-based protocols
+- **Protocol efficiency**: Only 8% overhead vs. 80% in text-based approaches
+- **Components**:
+  - QEMUBinaryComponent: SST component framework managing QEMU subprocess
+  - sst-device.c: QEMU device implementation using QOM
+  - Binary protocol: 24-byte requests, 20-byte responses
 
-- **Phase 2C.1**: SST component framework (QEMUBinaryComponent)
-- **Phase 2C.2**: QEMU device code (sst-device.c)
-- **Phase 2C.3**: QEMU device integration into QEMU source
-- **Phase 2C.4**: Multi-device support and inter-device communication
+### Multi-Device Support
 
-**Results**:
-- ~10,000 transactions/sec (10x improvement)
-- ~100μs latency (10x improvement)
-- 90% reduction in CPU usage
-- Protocol overhead: 8% (vs. 80% in Phase 2B)
+The framework supports multiple concurrent devices with flexible communication patterns:
 
-### Phase 2D: Multi-Core Support (Future)
+- **Multiple MMIO devices**: Echo, Compute, MMIO with interrupts
+- **Inter-device communication**: Devices can exchange data via SST peer links
+- **Scalability**: Tested with up to N devices in parallel
+- **Distributed simulation**: Deploy devices across multiple servers using SST's MPI support
+- **Address-based routing**: Automatic routing of memory transactions to correct device
 
-- Multiple QEMU instances
-- Shared memory devices
-- Core-to-core communication
-- SMP simulation
+### Interrupt Support
 
-### Phase 3: Linux Integration (Future)
+Advanced interrupt-driven I/O for realistic device modeling:
 
-See `../qemu-acalsim-sst-linux/` for Linux-based variant:
-- Full Linux kernel boot
-- VirtIO device integration
-- Kernel module drivers
-- User-space applications
+- **Interrupt events**: ASSERT/DEASSERT interrupt signaling
+- **Write-1-to-clear**: Standard interrupt status register pattern
+- **Configurable IRQ numbers**: Multiple devices with unique interrupt lines
+- **ISR integration**: Full interrupt service routine support in bare-metal firmware
+
+### Distributed Simulation
+
+Deploy QEMU and devices across multiple servers for large-scale simulation:
+
+- **MPI-based distribution**: Leverage SST's distributed simulation capabilities
+- **Flexible partitioning**: Group related devices or isolate compute-intensive components
+- **Cross-server communication**: SST Links automatically handle MPI communication
+- **Launch options**: Single server, multiple servers, or hostfile-based deployment
+
+See distributed_*.py configuration files and [GETTING_STARTED.md](GETTING_STARTED.md) for deployment examples.
+
+### Linux Integration
+
+For Linux-based simulation with kernel drivers and user-space applications, see the companion project:
+
+- `../qemu-acalsim-sst-linux/` - Full Linux kernel boot with VirtIO device integration
 
 ## Performance
 
 ### Protocol Comparison
 
-| Metric | Phase 2B (Serial) | Phase 2C (MMIO) | Improvement |
-|--------|------------------|----------------|-------------|
+The binary MMIO protocol provides significant performance advantages over text-based protocols:
+
+| Metric | Text-based Protocol | Binary MMIO Protocol | Improvement |
+|--------|---------------------|---------------------|-------------|
 | Throughput | ~1,000 tx/sec | ~10,000 tx/sec | 10x |
 | Latency | ~1ms/tx | ~100μs/tx | 10x |
 | CPU Usage | High (parsing) | Low (binary) | ~9x reduction |
@@ -849,6 +864,4 @@ Licensed under the Apache License, Version 2.0. See LICENSE file for details.
 
 ---
 
-**Current Status**: Phase 2C Complete (Binary MMIO, Multi-Device)
-**Next Phase**: Phase 2D (Multi-Core Support) or Phase 3 (Linux Integration)
 **Last Updated**: 2025-11-10
