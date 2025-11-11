@@ -176,12 +176,14 @@ ls -lh virtio-sst.ko
 ```bash
 cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps
 
-# Cross-compile for RISC-V
-make CROSS_COMPILE=riscv64-linux-gnu-
+# Cross-compile for RISC-V (statically linked)
+make clean && make CROSS_COMPILE=riscv64-linux-gnu-
 
-# Output: sst-test (RISC-V binary)
-file sst-test  # Should show: RISC-V 64-bit LSB executable
+# Output: sst-test (RISC-V binary, statically linked)
+file sst-test  # Should show: RISC-V 64-bit LSB executable, statically linked
 ```
+
+**Note**: Applications must be statically linked (`-static`) because the minimal BusyBox rootfs doesn't include dynamic libraries or the dynamic linker.
 
 ### 5. Build Root Filesystem
 

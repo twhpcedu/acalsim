@@ -7,7 +7,7 @@
 # Compiler and flags
 CC ?= gcc
 CFLAGS := -Wall -Wextra -O2 -I../../virtio-device
-LDFLAGS :=
+LDFLAGS := -static
 
 # Cross-compilation support
 ifdef CROSS_COMPILE
