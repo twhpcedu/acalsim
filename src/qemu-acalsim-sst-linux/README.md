@@ -1,84 +1,161 @@
-# QEMU-ACALSim-SST Linux Integration (Phase 3)
+# QEMU-ACALSim-SST Linux Integration
 
-This directory is reserved for Phase 3 development: Linux-based QEMU-SST integration.
+Full Linux kernel boot with VirtIO device integration for SST communication. This variant enables realistic system simulation with kernel drivers, user-space applications, and standard Linux interfaces.
 
 ## Overview
 
-Phase 3 will extend the QEMU-SST integration to support full Linux system simulation:
+This directory contains the Linux-based QEMU-SST integration, providing:
 
-- **Phase 3A**: Basic Linux boot with QEMU
-- **Phase 3B**: VirtIO device integration for SST communication
-- **Phase 3C**: Linux kernel module for SST device driver
-- **Phase 3D**: User-space applications communicating with SST
+- **Full Linux Boot**: Complete Linux operating system running on QEMU RISC-V
+- **VirtIO SST Device**: Standard VirtIO device for SST communication
+- **Kernel Driver**: Linux kernel module for SST device access
+- **User-Space Support**: Standard applications communicating through system calls
+- **Multi-Process/Thread**: Full OS-level concurrency and isolation
+- **Realistic Modeling**: System call overhead and OS scheduling effects
 
-## Differences from Bare-Metal Variant
+## Key Features
 
-The bare-metal variant (`qemu-acalsim-sst-baremetal`) provides:
-- Custom firmware (crt0.S) for CPU initialization
-- Direct hardware access via MMIO
-- No operating system overhead
-- Simple test programs in C and assembly
+### Linux Kernel Integration
+- Custom device tree for SST device declaration
+- VirtIO transport for efficient guest-host communication
+- Kernel driver implementing standard character device interface
+- Support for multiple processes accessing SST devices
 
-The Linux variant (`qemu-acalsim-sst-linux`) will provide:
-- Full Linux operating system
-- Standard kernel drivers and device tree
-- User-space application support
-- System call interface
-- Multi-process/multi-threaded support
+### VirtIO Protocol
+- Standard VirtIO queues for bidirectional communication
+- Efficient zero-copy data transfer where possible
+- Interrupt-driven or polling modes
+- Compatible with Linux VirtIO framework
 
-## Current Status
+### Application Interface
+- Standard `/dev/sst*` character devices
+- POSIX I/O operations (open, read, write, ioctl)
+- Multi-threaded application support
+- Event notification via poll/select
 
-**Status**: Placeholder directory (Phase 3 not yet started)
-
-**Prerequisites**:
-- Complete Phase 2 (bare-metal MMIO integration) ✅
-- Build custom QEMU with SST device ✅
-- Validate binary MMIO protocol ✅
-
-**Next Steps**:
-1. Obtain RISC-V Linux kernel source
-2. Configure kernel for QEMU virt machine
-3. Add device tree entry for SST device
-4. Develop kernel driver for SST device
-5. Create root filesystem with test applications
-6. Integrate with SST simulation
-
-## Directory Structure (Planned)
+## Directory Structure
 
 ```
 qemu-acalsim-sst-linux/
 ├── README.md              # This file
+├── GETTING_STARTED.md     # Setup and first simulation guide
+├── DEVELOPER_GUIDE.md     # Architecture and development details
 ├── kernel/                # Linux kernel configuration
 │   ├── config             # Kernel .config for RISC-V
-│   ├── device-tree/       # Device tree overlays
-│   └── patches/           # Kernel patches if needed
+│   ├── device-tree/       # Device tree overlays for SST device
+│   └── patches/           # Optional kernel patches
 ├── drivers/               # SST device drivers
-│   ├── sst-device.c       # Kernel module for SST device
-│   └── Makefile
-├── rootfs/                # Root filesystem
-│   ├── init               # Init script
+│   ├── sst-virtio.c       # VirtIO SST kernel driver
+│   ├── sst-device.h       # Driver header definitions
+│   └── Makefile           # Kernel module build
+├── rootfs/                # Root filesystem contents
+│   ├── init               # Init script for simulation
 │   └── apps/              # Test applications
-├── qemu-config/           # QEMU configuration
-│   └── run-linux.sh       # Script to launch QEMU with Linux
-└── sst-config/            # SST configuration
-    └── linux_test.py      # SST Python configuration for Linux
+│       ├── sst-test.c     # Basic SST device test
+│       ├── multi-proc.c   # Multi-process test
+│       └── Makefile
+├── virtio-device/         # QEMU VirtIO device implementation
+│   ├── virtio-sst.c       # VirtIO SST device for QEMU
+│   ├── virtio-sst.h       # Device header
+│   └── sst-protocol.h     # SST communication protocol
+├── qemu-config/           # QEMU launch configuration
+│   ├── run-linux.sh       # Launch script with all parameters
+│   └── devicetree.dts     # Device tree source
+└── sst-config/            # SST simulation configuration
+    ├── linux_basic.py     # Single device test
+    ├── linux_multi.py     # Multiple device test
+    └── components/        # SST component implementations
 ```
 
-## Related Documentation
+## Quick Start
 
+### Prerequisites
+- QEMU with VirtIO SST device support
+- RISC-V Linux kernel (5.15+)
+- SST Core framework
+- RISC-V toolchain for kernel and applications
+
+### Build and Run
+```bash
+# Build kernel driver
+cd drivers && make
+
+# Build test applications
+cd rootfs/apps && make
+
+# Run simulation
+cd qemu-config && ./run-linux.sh
+```
+
+For detailed instructions, see [GETTING_STARTED.md](GETTING_STARTED.md).
+
+## Differences from Bare-Metal Variants
+
+### Bare-Metal Integration (`qemu-acalsim-sst-baremetal`)
+- Custom firmware (crt0.S) for CPU initialization
+- Direct hardware access via MMIO
+- No operating system overhead
+- Simple test programs in C and assembly
+- Fixed memory layout and device addresses
+
+### Linux Integration (this variant)
+- Full Linux operating system with scheduler
+- Standard kernel drivers and device tree
+- User-space application support through system calls
+- Process isolation and virtual memory
+- Dynamic device discovery and management
+- Realistic OS overhead modeling
+
+### HSA Protocol (`qemu-acalsim-sst-baremetal-HSA`)
+- Specialized for heterogeneous compute modeling
+- AQL packet-based job dispatch
+- User-mode queue abstraction
+- GPU/accelerator kernel execution modeling
+
+## Use Cases
+
+This Linux integration is ideal for:
+
+1. **System-Level Simulation**: Modeling complete software stacks with OS effects
+2. **Driver Development**: Testing kernel drivers in simulated hardware
+3. **Application Validation**: Running real applications with SST device interaction
+4. **Performance Analysis**: Understanding OS overhead in accelerated systems
+5. **Multi-Process Scenarios**: Simulating concurrent device access patterns
+
+## Getting Started
+
+For first-time users:
+1. See [GETTING_STARTED.md](GETTING_STARTED.md) for setup instructions
+2. Review the example applications in `rootfs/apps/`
+3. Try the basic simulation: `./qemu-config/run-linux.sh`
+4. Examine SST configuration in `sst-config/linux_basic.py`
+
+For developers:
+1. Read [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for architecture details
+2. Study the VirtIO device implementation in `virtio-device/`
+3. Review the kernel driver in `drivers/sst-virtio.c`
+4. See the protocol definition in `virtio-device/sst-protocol.h`
+
+## Documentation
+
+- **[GETTING_STARTED.md](GETTING_STARTED.md)**: Complete setup and usage guide
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**: Architecture and implementation details
+- **[API_REFERENCE.md](API_REFERENCE.md)**: Kernel driver and user-space API
+
+## Related Projects
+
+For other simulation modes:
 - **Bare-Metal Integration**: See `../qemu-acalsim-sst-baremetal/`
-- **Phase 2 Design**: `../qemu-acalsim-sst-baremetal/PHASE2C_DESIGN.md`
-- **Build Instructions**: `../qemu-acalsim-sst-baremetal/BUILD_AND_TEST.md`
+- **HSA Protocol**: See `../qemu-acalsim-sst-baremetal-HSA/`
 
 ## References
 
-- RISC-V Linux: https://github.com/riscv/riscv-linux
-- QEMU RISC-V: https://www.qemu.org/docs/master/system/target-riscv.html
-- Device Tree Specification: https://www.devicetree.org/
-- Linux Device Drivers: https://lwn.net/Kernel/LDD3/
+- [RISC-V Linux](https://github.com/riscv/riscv-linux)
+- [QEMU RISC-V Documentation](https://www.qemu.org/docs/master/system/target-riscv.html)
+- [VirtIO Specification](https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html)
+- [Linux Device Drivers](https://lwn.net/Kernel/LDD3/)
+- [Device Tree Specification](https://www.devicetree.org/)
 
 ---
 
-**Last Updated**: 2025-11-10
-**Phase**: 3 (Planning)
-**Status**: Not Started
+**Last Updated**: 2025-11-11

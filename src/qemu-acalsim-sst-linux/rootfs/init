@@ -1,0 +1,100 @@
+#!/bin/sh
+#
+# Init script for SST Linux simulation
+#
+# Copyright 2023-2025 Playlab/ACAL
+#
+# This script runs as PID 1 in the Linux guest and performs
+# basic system initialization for SST device testing.
+#
+
+echo "============================================"
+echo "  ACALSim Linux SST Integration"
+echo "  Initializing system..."
+echo "============================================"
+
+# Mount essential filesystems
+echo "Mounting filesystems..."
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+
+# Create device nodes if not already present
+echo "Creating device nodes..."
+mkdir -p /dev/pts
+mount -t devpts none /dev/pts
+
+# Load virtio-sst kernel module
+echo "Loading virtio-sst kernel module..."
+if [ -f /lib/modules/$(uname -r)/extra/virtio-sst.ko ]; then
+    insmod /lib/modules/$(uname -r)/extra/virtio-sst.ko
+elif [ -f /virtio-sst.ko ]; then
+    insmod /virtio-sst.ko
+else
+    echo "Warning: virtio-sst.ko not found"
+fi
+
+# Wait for device to appear
+echo "Waiting for SST device..."
+for i in 1 2 3 4 5; do
+    if [ -c /dev/sst0 ]; then
+        echo "SST device found: /dev/sst0"
+        break
+    fi
+    echo "  Waiting... ($i/5)"
+    sleep 1
+done
+
+if [ ! -c /dev/sst0 ]; then
+    echo "Error: SST device not found!"
+    echo "Check QEMU VirtIO device configuration"
+fi
+
+# Show system information
+echo ""
+echo "System Information:"
+echo "  Kernel: $(uname -r)"
+echo "  Architecture: $(uname -m)"
+echo "  Hostname: $(hostname)"
+
+# Show loaded modules
+echo ""
+echo "Loaded modules:"
+lsmod | grep virtio
+
+# Show SST devices
+echo ""
+echo "SST devices:"
+ls -l /dev/sst* 2>/dev/null || echo "  No SST devices found"
+
+# Run automatic tests if present
+if [ -f /apps/auto-test.sh ]; then
+    echo ""
+    echo "Running automatic tests..."
+    /apps/auto-test.sh
+fi
+
+# Interactive shell or command from kernel cmdline
+echo ""
+echo "============================================"
+echo "  Initialization complete"
+echo "============================================"
+echo ""
+
+# Check if a command was specified in kernel command line
+if grep -q "init_cmd=" /proc/cmdline; then
+    CMD=$(cat /proc/cmdline | sed 's/.*init_cmd=\([^ ]*\).*/\1/')
+    echo "Executing: $CMD"
+    exec $CMD
+fi
+
+# Start interactive shell
+echo "Starting interactive shell..."
+echo "Type 'help' for available commands"
+echo ""
+
+exec /bin/sh
+
+# Shutdown on exit
+echo "Shutting down..."
+poweroff -f
