@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-#include "virtio-sst.h"
+#include "hw/virtio/virtio-sst.h"
 #include "hw/qdev-properties.h"
 #include "hw/virtio/virtio-access.h"
 #include "qemu/iov.h"
@@ -324,8 +324,6 @@ void virtio_sst_set_config(VirtIODevice *vdev, const uint8_t *config_data)
  */
 void virtio_sst_set_status(VirtIODevice *vdev, uint8_t status)
 {
-    VirtIOSST *s = VIRTIO_SST(vdev);
-
     if (status & VIRTIO_CONFIG_S_DRIVER_OK) {
         qemu_log("VirtIO SST: Driver initialized successfully\n");
     }
@@ -366,7 +364,7 @@ void virtio_sst_realize(DeviceState *dev, Error **errp)
              s->socket_path, s->device_id);
 
     /* Initialize VirtIO device */
-    virtio_init(vdev, VIRTIO_ID_SST, sizeof(struct SSTConfig));
+    virtio_init(vdev, "virtio-sst", VIRTIO_ID_SST, sizeof(struct SSTConfig));
 
     /* Create VirtQueues */
     s->req_vq = virtio_add_queue(vdev, VIRTIO_SST_QUEUE_SIZE,

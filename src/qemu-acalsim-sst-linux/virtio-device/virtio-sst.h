@@ -82,8 +82,6 @@ struct VirtIOSST {
     char *socket_path;          // Unix socket path to SST
     int socket_fd;              // Socket file descriptor
     bool connected;             // Connection status
-    QIOChannel *socket_channel; // QEMU I/O channel for async
-    GSource *socket_watch;      // Socket watch for async events
 
     /* Device Properties */
     uint32_t device_id;         // SST device ID
