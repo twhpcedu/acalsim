@@ -39,11 +39,12 @@ if os.path.exists(SOCKET_PATH):
 #
 print("Creating SST device component...")
 
-sst_device = sst.Component("sst_device_0", "acalsim.ACALSimDeviceComponent")
+sst_device = sst.Component("sst_device_0", "acalsim.VirtIODevice")
 sst_device.addParams({
     "socket_path": SOCKET_PATH,
     "device_id": DEVICE_ID,
-    "verbose": "1"
+    "verbose": "1",
+    "clock": "1GHz"
 })
 
 #

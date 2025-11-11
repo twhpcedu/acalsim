@@ -34,6 +34,9 @@ INCLUDES = -I$(INCLUDE_DIR)
 # Component name and files
 COMPONENT_NAME = libacalsim.so
 
+# Local Linux integration sources
+LOCAL_SOURCES = ACALSimVirtIODeviceComponent.cc
+
 # Shared SST framework sources (devices)
 SST_SOURCES = $(SST_SRC_DIR)/ACALSimDeviceComponent.cc \
               $(SST_SRC_DIR)/ACALSimComputeDeviceComponent.cc \
@@ -43,10 +46,11 @@ SST_SOURCES = $(SST_SRC_DIR)/ACALSimDeviceComponent.cc \
 HSA_SOURCES = $(HSA_SRC_DIR)/HSAHostComponent.cc $(HSA_SRC_DIR)/HSAComputeComponent.cc
 
 # All sources and objects
-SOURCES = $(SST_SOURCES) $(HSA_SOURCES)
+SOURCES = $(LOCAL_SOURCES) $(SST_SOURCES) $(HSA_SOURCES)
+LOCAL_OBJECTS = ACALSimVirtIODeviceComponent.o
 SST_OBJECTS = ACALSimDeviceComponent.o ACALSimComputeDeviceComponent.o ACALSimMMIODevice.o
 HSA_OBJECTS = HSAHostComponent.o HSAComputeComponent.o
-OBJECTS = $(SST_OBJECTS) $(HSA_OBJECTS)
+OBJECTS = $(LOCAL_OBJECTS) $(SST_OBJECTS) $(HSA_OBJECTS)
 
 # Default target
 all: $(COMPONENT_NAME)
@@ -56,7 +60,10 @@ $(COMPONENT_NAME): $(OBJECTS)
 	$(CXX) $(LDFLAGS) -shared -fPIC -o $@ $^
 
 # Compile local source files
-%.o: %.cc $(HEADERS)
+ACALSimVirtIODeviceComponent.o: ACALSimVirtIODeviceComponent.cc ACALSimVirtIODeviceComponent.hh
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -I. -I../virtio-device -fPIC -c $< -o $@
+
+%.o: %.cc
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
 
 # Compile SST framework sources
