@@ -90,7 +90,8 @@ install: $(COMPONENT_NAME)
 	@cp $(COMPONENT_NAME) $(SST_ELEMENT_DIR)/
 	@echo "Installation complete"
 	@echo "You can now use these components in SST:"
-	@echo "  - sst.Component(name, \"acalsim.QEMUDevice\")      # Echo device"
+	@echo "  - sst.Component(name, \"acalsim.VirtIODevice\")   # VirtIO SST device (Linux integration)"
+	@echo "  - sst.Component(name, \"acalsim.QEMUDevice\")     # MMIO device (bare-metal)"
 	@echo "  - sst.Component(name, \"acalsim.ComputeDevice\")  # Compute device"
 	@echo "  - sst.Component(name, \"acalsim.MMIODevice\")     # MMIO device with interrupts"
 	@echo "  - sst.Component(name, \"acalsim.HSAHost\")        # HSA host agent"

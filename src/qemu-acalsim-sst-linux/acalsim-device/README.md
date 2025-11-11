@@ -47,23 +47,29 @@ make install
 
 The library provides these SST components:
 
-### ACALSimDeviceComponent
-Main device component that handles VirtIO SST protocol requests from QEMU.
+### ACALSimVirtIODeviceComponent
+Main device component for Linux integration that handles VirtIO SST protocol requests via Unix domain socket.
+
+**Component Name**: `acalsim.VirtIODevice`
 
 **Parameters**:
 - `socket_path`: Unix domain socket path (e.g., `/tmp/qemu-sst-linux.sock`)
 - `device_id`: Device identifier (0-based)
-- `verbose`: Enable verbose logging (0 or 1)
+- `verbose`: Verbosity level (0-3)
+- `clock`: Clock frequency (e.g., "1GHz")
 
 **Usage in SST Python**:
 ```python
-device = sst.Component("sst_device_0", "acalsim.ACALSimDeviceComponent")
+device = sst.Component("sst_device_0", "acalsim.VirtIODevice")
 device.addParams({
     "socket_path": "/tmp/qemu-sst-linux.sock",
     "device_id": 0,
-    "verbose": "1"
+    "verbose": "1",
+    "clock": "1GHz"
 })
 ```
+
+**Note**: This component uses socket-based communication and does NOT require SST links. It is specifically designed for Linux kernel driver integration via VirtIO.
 
 ### ACALSimComputeDeviceComponent
 Compute simulation device for processing COMPUTE requests.
