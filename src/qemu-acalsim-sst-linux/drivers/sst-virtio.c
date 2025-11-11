@@ -26,8 +26,6 @@
 #include <linux/poll.h>
 #include <linux/scatterlist.h>
 #include "sst-device.h"
-
-MODULE_LICENSE("Apache 2.0");
 MODULE_AUTHOR("Playlab/ACAL");
 MODULE_DESCRIPTION("VirtIO SST Device Driver");
 MODULE_VERSION("1.0");
@@ -596,3 +594,5 @@ static void __exit sst_exit(void)
 
 module_init(sst_init);
 module_exit(sst_exit);
+
+MODULE_LICENSE("GPL");

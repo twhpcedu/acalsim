@@ -47,8 +47,12 @@ sudo apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
 sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
                    libncurses-dev
 
-# Install QEMU build dependencies
-sudo apt-get install -y libglib2.0-dev libpixman-1-dev ninja-build
+# Install QEMU build dependencies (including VirtFS support)
+sudo apt-get install -y libglib2.0-dev libpixman-1-dev ninja-build \
+                   libcap-ng-dev libattr1-dev
+
+# Install rootfs build tools
+sudo apt-get install -y cpio
 
 # Verify toolchain
 riscv64-linux-gnu-gcc --version
@@ -216,13 +220,22 @@ cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/drivers/virtio-sst.ko 
 # Copy test applications
 cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps/sst-test apps/
 chmod +x apps/sst-test
+```
 
-# Create device nodes
-sudo mknod -m 666 dev/null c 1 3
-sudo mknod -m 666 dev/console c 5 1
+**Create device nodes** (requires root privileges, run this from host or as root in container):
+```bash
+# From host machine:
+docker exec -u root acalsim-workspace bash -c "cd /home/user/rootfs && mknod -m 666 dev/null c 1 3 && mknod -m 666 dev/console c 5 1"
 
-# Create initramfs
-find . | cpio -o -H newc | gzip > /home/user/initramfs.cpio.gz
+# OR inside container as root:
+# sudo mknod -m 666 dev/null c 1 3
+# sudo mknod -m 666 dev/console c 5 1
+```
+
+**Create initramfs** (back as regular user):
+```bash
+cd /home/user/rootfs
+find . | cpio -o -H newc 2>/dev/null | gzip > /home/user/initramfs.cpio.gz
 
 echo "Initramfs created: /home/user/initramfs.cpio.gz"
 ls -lh /home/user/initramfs.cpio.gz
@@ -349,7 +362,8 @@ docker exec acalsim-workspace bash -c "
         g++-riscv64-linux-gnu \
         binutils-riscv64-linux-gnu \
         bc bison flex libssl-dev libelf-dev libncurses-dev \
-        libglib2.0-dev libpixman-1-dev ninja-build wget
+        libglib2.0-dev libpixman-1-dev ninja-build \
+        libcap-ng-dev libattr1-dev wget cpio
 
     echo 'Toolchains installed successfully'
     riscv64-linux-gnu-gcc --version

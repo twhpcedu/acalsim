@@ -37,7 +37,16 @@
 #ifndef SST_PROTOCOL_H
 #define SST_PROTOCOL_H
 
+#ifdef __KERNEL__
+#include <linux/types.h>
+/* Define stdint-style types for kernel space */
+typedef u8  uint8_t;
+typedef u16 uint16_t;
+typedef u32 uint32_t;
+typedef u64 uint64_t;
+#else
 #include <stdint.h>
+#endif
 
 /*
  * VirtIO Device and Vendor IDs
