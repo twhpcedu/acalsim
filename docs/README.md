@@ -124,6 +124,83 @@ Learn by example from test projects:
 
 ---
 
+## SST Integration Projects
+
+Integration with Sandia's Structural Simulation Toolkit (SST) for co-simulation:
+
+### SST-Core Integration
+
+| Document | Description |
+|----------|-------------|
+| [SST Quickstart](https://acalsim.playlab.tw/docs/sst-integration/quickstart) | Quick introduction to SST integration |
+| [Integration Guide](https://acalsim.playlab.tw/docs/sst-integration/integration-guide) | Detailed integration patterns and examples |
+| [RISC-V Examples](https://acalsim.playlab.tw/docs/sst-integration/riscv-examples) | RISC-V processor integration examples |
+
+### QEMU-SST Baremetal (MMIO)
+
+Bare-metal RISC-V applications with direct MMIO communication to SST accelerators:
+
+| Document | Description |
+|----------|-------------|
+| [Baremetal Overview](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/README) | Architecture and component overview |
+| [Getting Started](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/GETTING_STARTED) | Build and run bare-metal examples |
+| [Developer Guide](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/DEVELOPER_GUIDE) | Extend and customize the integration |
+| [Demo Examples](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/DEMO_EXAMPLE) | Multi-device test patterns |
+| [MPI Setup](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/MPI_SETUP_GUIDE) | Distributed simulation configuration |
+| [Docker Setup](https://acalsim.playlab.tw/docs/qemu-sst-baremetal/DOCKER) | Container-based workflow |
+
+**Location**: `src/qemu-acalsim-sst-baremetal/`
+
+### QEMU-SST Baremetal HSA Protocol
+
+HSA (Heterogeneous System Architecture) protocol for job-based accelerator communication:
+
+| Document | Description |
+|----------|-------------|
+| [HSA Overview](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/README) | HSA protocol architecture |
+| [Getting Started](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/GETTING_STARTED) | Build HSA examples |
+| [Developer Guide](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/DEVELOPER_GUIDE) | Implement HSA job handlers |
+| [Demo Examples](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/DEMO_EXAMPLE) | Multi-accelerator job dispatch |
+| [MPI Setup](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/MPI_SETUP_GUIDE) | Distributed HSA configuration |
+| [Docker Setup](https://acalsim.playlab.tw/docs/qemu-sst-baremetal-hsa/DOCKER) | Container workflow |
+
+**Location**: `src/qemu-acalsim-sst-baremetal/` (HSA components)
+
+### QEMU-SST Linux (VirtIO)
+
+Full Linux OS running on RISC-V with VirtIO device driver for SST communication:
+
+| Document | Description |
+|----------|-------------|
+| [Linux Overview](https://acalsim.playlab.tw/docs/qemu-sst-linux/README) | VirtIO architecture and components |
+| [Getting Started](https://acalsim.playlab.tw/docs/qemu-sst-linux/GETTING_STARTED) | Build Linux kernel and run tests |
+| [Architecture Tutorial](https://acalsim.playlab.tw/docs/qemu-sst-linux/ARCHITECTURE) | From-scratch architecture deep dive |
+| [App Development](https://acalsim.playlab.tw/docs/qemu-sst-linux/APP_DEVELOPMENT) | Write Linux applications using SST API |
+| [Developer Guide](https://acalsim.playlab.tw/docs/qemu-sst-linux/DEVELOPER_GUIDE) | Extend kernel driver and QEMU device |
+| [Deployment Guide](https://acalsim.playlab.tw/docs/qemu-sst-linux/DEPLOYMENT) | Single-server vs multi-server deployment |
+| [Build Notes](https://acalsim.playlab.tw/docs/qemu-sst-linux/BUILD_NOTES) | Docker vs cross-compile workflows |
+
+**Location**: `src/qemu-acalsim-sst-linux/`
+
+**Key Features**:
+- **Linux Integration**: Full RISC-V Linux OS with VirtIO driver (`/dev/sst*` devices)
+- **Production-like**: Models realistic OS overhead and driver latency
+- **HSA Multi-Accelerator Demo**: Example application controlling 4 AI accelerators in parallel
+- **API-driven**: Standard Linux system calls for accelerator control
+
+### Comparison of SST Integration Approaches
+
+| Feature | Baremetal (MMIO) | Baremetal (HSA) | Linux (VirtIO) |
+|---------|------------------|-----------------|----------------|
+| **OS Overhead** | None | None | ✅ Modeled |
+| **Development Speed** | ✅ Fast | ✅ Fast | Slower |
+| **Realism** | Basic | Medium | ✅ Production-like |
+| **Use Case** | Early HW dev | Accelerator testing | SW/HW co-design |
+| **Standard APIs** | Custom MMIO | HSA-like | ✅ Linux syscalls |
+| **Multi-process** | No | No | ✅ Supported |
+
+---
+
 ## External Resources
 
 - **GitHub Repository**: https://github.com/ACAL-Playlab/ACALSim
