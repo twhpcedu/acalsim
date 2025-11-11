@@ -39,16 +39,16 @@ All tools are installed **inside the Docker container**:
 docker exec -it acalsim-workspace bash
 
 # Install RISC-V cross-compilation toolchain
-apt-get update
-apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
+sudo apt-get update
+sudo apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
                    binutils-riscv64-linux-gnu
 
 # Install kernel build tools
-apt-get install -y bc bison flex libssl-dev libelf-dev \
+sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
                    libncurses-dev
 
 # Install QEMU build dependencies
-apt-get install -y libglib2.0-dev libpixman-1-dev ninja-build
+sudo apt-get install -y libglib2.0-dev libpixman-1-dev ninja-build
 
 # Verify toolchain
 riscv64-linux-gnu-gcc --version
@@ -64,6 +64,34 @@ docker exec -it acalsim-workspace bash
 
 ### 1. Build QEMU with VirtIO SST Device
 
+**Automated Setup (Recommended)**:
+
+```bash
+# Run the setup script to integrate VirtIO SST device
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/qemu-config
+./setup-qemu-virtio-sst.sh /home/user/qemu-build/qemu
+
+# Configure and build QEMU
+cd /home/user/qemu-build/qemu
+mkdir -p build && cd build
+../configure --target-list=riscv64-softmmu --enable-virtfs
+make -j$(nproc)
+
+# Verify QEMU built successfully
+./qemu-system-riscv64 --version
+```
+
+The setup script automatically:
+- Copies VirtIO SST device files to QEMU source tree
+- Updates `hw/virtio/meson.build` with proper ordering
+- Adds `CONFIG_VIRTIO_SST` to `hw/virtio/Kconfig`
+- Verifies all files are correctly installed
+
+<details>
+<summary>Manual Setup (Alternative)</summary>
+
+If you prefer manual setup or need to troubleshoot:
+
 ```bash
 cd /home/user/qemu-build/qemu
 
@@ -75,9 +103,11 @@ cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/virtio-device/virtio-s
 cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/virtio-device/virtio-sst.c \
    hw/virtio/
 
-# Add to meson.build
-echo "virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))" \
-    >> hw/virtio/meson.build
+# Update meson.build - IMPORTANT: Must add BEFORE specific_ss.add_all line
+# Find the line: specific_ss.add_all(when: 'CONFIG_VIRTIO', if_true: virtio_ss)
+# Insert BEFORE it: virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))
+sed -i "/^specific_ss.add_all.*CONFIG_VIRTIO.*virtio_ss/i virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))" \
+    hw/virtio/meson.build
 
 # Add to Kconfig
 cat >> hw/virtio/Kconfig <<EOF
@@ -88,14 +118,13 @@ config VIRTIO_SST
     depends on VIRTIO
 EOF
 
-# Configure and build QEMU
+# Configure and build
 mkdir -p build && cd build
 ../configure --target-list=riscv64-softmmu --enable-virtfs
 make -j$(nproc)
-
-# Verify QEMU built successfully
-./qemu-system-riscv64 --version
 ```
+
+</details>
 
 ### 2. Build RISC-V Linux Kernel
 
