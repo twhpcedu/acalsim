@@ -334,8 +334,8 @@ int sst_init_vqs(struct sst_virt_device *sdev)
     int ret;
 
     /* Setup queue callbacks */
-    callbacks[SST_VQ_REQUEST] = NULL;  /* Request queue (device doesn't callback) */
-    callbacks[SST_VQ_RESPONSE] = sst_response_done;
+    callbacks[SST_VQ_REQUEST] = sst_response_done;  /* Callback when request completes */
+    callbacks[SST_VQ_RESPONSE] = NULL;  /* Response queue not used */
     callbacks[SST_VQ_EVENT] = sst_event_done;
 
     names[SST_VQ_REQUEST] = "request";

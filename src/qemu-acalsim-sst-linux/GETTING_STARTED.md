@@ -330,7 +330,7 @@ Run the test application:
 # In QEMU console (Terminal 2)
 /apps/sst-test
 
-# Output:
+# Expected Output:
 ============================================
   SST Device Test Application
 ============================================
@@ -338,18 +338,41 @@ Run the test application:
 Opening device: /dev/sst0
 Device opened successfully (fd=3)
 
-[TEST] NOOP Request
+[TEST 1/5] NOOP Request
+  Request ID: 1
   Status: OK
   PASSED
 
-[TEST] ECHO Request
+[TEST 2/5] ECHO Request
+  Request ID: 2
+  Echo data matches: "Hello SST!"
   Status: OK
-  Echo data: "Hello SST!"
   PASSED
 
-...
+[TEST 3/5] GET_INFO Request
+  Request ID: 3
+  Device version: 0x00010000
+  Max compute units: 1000000
+  Memory size: 268435456 bytes
+  Status: OK
+  PASSED
 
+[TEST 4/5] COMPUTE Request
+  Request ID: 4
+  Compute units: 1000
+  Simulated cycles: 100000
+  Status: OK
+  PASSED
+
+[TEST 5/5] RESET Request
+  Request ID: 5
+  Status: OK
+  PASSED
+
+============================================
 Test Summary: 5/5 PASSED
+============================================
+All tests completed successfully!
 ```
 
 ## Common Workflows

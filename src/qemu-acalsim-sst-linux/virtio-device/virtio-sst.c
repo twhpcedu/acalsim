@@ -109,8 +109,9 @@ bool virtio_sst_send_request(VirtIOSST *s, struct SSTRequest *req,
 
 /*
  * Process single request from virtqueue
+ * Note: elem is popped from req_vq but response is pushed to resp_vq (split queue design)
  */
-void virtio_sst_process_request(VirtIOSST *s, VirtQueueElement *elem)
+void virtio_sst_process_request(VirtIOSST *s, VirtQueue *vq, VirtQueueElement *elem)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(s);
     struct SSTRequest *req;
@@ -190,13 +191,17 @@ void virtio_sst_process_request(VirtIOSST *s, VirtQueueElement *elem)
 
     /* Copy response to guest memory */
     resp_size = iov_size(elem->in_sg, elem->in_num);
-    if (resp_size >= sizeof(*resp)) {
+    if (resp_size < sizeof(*resp)) {
+        qemu_log("VirtIO SST: Response buffer too small: %zu < %zu\n",
+                 resp_size, sizeof(*resp));
+        resp->status = SST_STATUS_ERROR;
+    } else {
         iov_from_buf(elem->in_sg, elem->in_num, 0, resp, sizeof(*resp));
     }
 
-    /* Push response and notify guest */
-    virtqueue_push(s->resp_vq, elem, sizeof(*resp));
-    virtio_notify(vdev, s->resp_vq);
+    /* Push response and notify guest - MUST push to same queue we popped from */
+    virtqueue_push(vq, elem, sizeof(*resp));
+    virtio_notify(vdev, vq);
 
     s->total_responses++;
 
@@ -205,8 +210,25 @@ void virtio_sst_process_request(VirtIOSST *s, VirtQueueElement *elem)
     return;
 
 error:
+    /* Even on error, must push element back to queue */
     s->total_errors++;
-    g_free(elem);
+
+    /* Allocate and initialize error response */
+    resp = g_malloc(sizeof(struct SSTResponse));
+    memset(resp, 0, sizeof(*resp));
+    resp->status = SST_STATUS_ERROR;
+
+    /* Copy error response to guest memory */
+    resp_size = iov_size(elem->in_sg, elem->in_num);
+    if (resp_size >= sizeof(*resp)) {
+        iov_from_buf(elem->in_sg, elem->in_num, 0, resp, sizeof(*resp));
+    }
+
+    /* Must push element back even on error */
+    virtqueue_push(vq, elem, sizeof(*resp));
+    virtio_notify(vdev, vq);
+
+    g_free(resp);
 }
 
 /*
@@ -218,7 +240,7 @@ void virtio_sst_handle_request(VirtIODevice *vdev, VirtQueue *vq)
     VirtQueueElement *elem;
 
     while ((elem = virtqueue_pop(vq, sizeof(VirtQueueElement)))) {
-        virtio_sst_process_request(s, elem);
+        virtio_sst_process_request(s, vq, elem);
         s->total_requests++;
     }
 }

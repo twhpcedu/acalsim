@@ -59,9 +59,9 @@ ACALSimVirtIODeviceComponent::ACALSimVirtIODeviceComponent(SST::ComponentId_t id
         this, &ACALSimVirtIODeviceComponent::clockTick);
     registerClock(clock_freq, clock_handler_);
 
-    // Register as primary component
+    // Register as primary component and keep simulation running
     registerAsPrimaryComponent();
-    primaryComponentDoNotEndSim();
+    primaryComponentDoNotEndSim();  // Keep ticking indefinitely
 
     out_.verbose(CALL_INFO, 1, 0, "VirtIO Device initialized successfully\n");
 }
@@ -161,7 +161,7 @@ void ACALSimVirtIODeviceComponent::checkForConnections() {
 }
 
 void ACALSimVirtIODeviceComponent::handleSocketData() {
-    uint8_t buffer[1024];
+    uint8_t buffer[sizeof(struct SSTRequest)];  // Must match SSTRequest size (4104 bytes)
     ssize_t n = recv(client_fd_, buffer, sizeof(buffer), 0);
 
     if (n > 0) {

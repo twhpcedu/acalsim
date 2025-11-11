@@ -43,7 +43,7 @@ sst_device = sst.Component("sst_device_0", "acalsim.VirtIODevice")
 sst_device.addParams({
     "socket_path": SOCKET_PATH,
     "device_id": DEVICE_ID,
-    "verbose": "1",
+    "verbose": "2",  # Increased verbosity to see detailed request processing
     "clock": "1GHz"
 })
 

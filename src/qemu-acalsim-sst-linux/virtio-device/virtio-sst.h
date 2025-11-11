@@ -119,7 +119,7 @@ bool virtio_sst_send_request(VirtIOSST *s, struct SSTRequest *req,
                              struct SSTResponse *resp);
 
 /* Request Processing */
-void virtio_sst_process_request(VirtIOSST *s, VirtQueueElement *elem);
+void virtio_sst_process_request(VirtIOSST *s, VirtQueue *vq, VirtQueueElement *elem);
 void virtio_sst_complete_request(VirtIOSST *s, SSTRequestInfo *info);
 
 /* Event Handling */
