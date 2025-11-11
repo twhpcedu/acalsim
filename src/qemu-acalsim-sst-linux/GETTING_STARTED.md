@@ -244,7 +244,7 @@ ls -lh /home/user/initramfs.cpio.gz
 ### 6. Build SST Components
 
 ```bash
-cd /home/user/projects/acalsim/src/acalsim-device
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/acalsim-device
 
 # Set SST environment
 export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install
@@ -257,6 +257,8 @@ make clean && make
 # Verify library built
 ls -lh libacalsim.so
 ```
+
+**Note**: The SST device components are built locally but use shared ACALSim framework source files from `../../../libs/sst/` and `../../../libs/HSA/`. See `acalsim-device/README.md` for details.
 
 ### 7. Run Your First Simulation
 
@@ -409,7 +411,7 @@ export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install
 export PATH=$SST_CORE_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
 
-cd /home/user/projects/acalsim/src/acalsim-device
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/acalsim-device
 make clean && make
 
 echo "All components built successfully!"

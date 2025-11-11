@@ -18,8 +18,8 @@ import os
 SOCKET_PATH = "/tmp/qemu-sst-linux.sock"
 DEVICE_ID = 0
 
-# Component library (adjust path as needed)
-SST_LIB = os.getenv("SST_LIB", "../../acalsim-device/libacalsim.so")
+# Component library (local build)
+SST_LIB = os.getenv("SST_LIB", "../acalsim-device/libacalsim.so")
 
 print("=" * 60)
 print("SST Linux Integration - Basic Configuration")
