@@ -1,6 +1,6 @@
 # Getting Started with Linux SST Integration
 
-This guide walks you through setting up and running your first Linux-based QEMU-ACALSim-SST simulation.
+This guide walks you through setting up and running your first Linux-based QEMU-ACALSim-SST simulation **entirely within the acalsim-workspace Docker container**.
 
 ## Overview
 
@@ -11,147 +11,150 @@ The Linux integration enables full operating system simulation with:
 - User-space applications accessing SST via standard I/O
 - Realistic OS overhead modeling
 
+**All components are built and run inside the `acalsim-workspace` Docker container.**
+
 ## Prerequisites
 
-### Required Software
+### Docker Container Setup
 
-1. **QEMU with VirtIO SST Device**
-   - QEMU 7.0+ with RISC-V support
-   - Custom VirtIO SST device (see Integration section)
+Ensure the `acalsim-workspace` container is running:
 
-2. **Linux Kernel**
-   - RISC-V Linux kernel 5.15+
-   - VirtIO support enabled
-   - SST kernel driver compiled
-
-3. **SST Core Framework**
-   - SST Core 11.0+
-   - SST device components built
-
-4. **Cross-compilation Tools**
-   - RISC-V GCC toolchain
-   - Kernel build tools
-
-### Installation
-
-#### Install RISC-V Toolchain
-
-**Ubuntu/Debian:**
 ```bash
-sudo apt-get install gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+# Check if container is running
+docker ps | grep acalsim-workspace
+
+# If not running, start it
+docker start acalsim-workspace
+
+# Access the container
+docker exec -it acalsim-workspace bash
 ```
 
-**macOS (via Homebrew):**
-```bash
-brew tap riscv/riscv
-brew install riscv-tools
-```
+### Install Required Tools in Container
 
-#### Install QEMU
+All tools are installed **inside the Docker container**:
 
 ```bash
-# From package manager (may lack VirtIO SST device)
-sudo apt-get install qemu-system-misc
+# Enter the container
+docker exec -it acalsim-workspace bash
 
-# Or build from source with VirtIO SST device
-# See "Integrating VirtIO Device" section below
-```
+# Install RISC-V cross-compilation toolchain
+apt-get update
+apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
+                   binutils-riscv64-linux-gnu
 
-#### Install SST Core
+# Install kernel build tools
+apt-get install -y bc bison flex libssl-dev libelf-dev \
+                   libncurses-dev
 
-```bash
-# Follow SST installation guide
-# http://sst-simulator.org/SSTPages/SSTMainDocumentation/
+# Install QEMU build dependencies
+apt-get install -y libglib2.0-dev libpixman-1-dev ninja-build
+
+# Verify toolchain
+riscv64-linux-gnu-gcc --version
 ```
 
 ## Quick Start
 
-### 1. Integrate VirtIO Device into QEMU
-
-Copy the VirtIO SST device files into QEMU source:
+All commands below are run **inside the container**:
 
 ```bash
-# Set QEMU source directory
-export QEMU_SRC=/path/to/qemu
+docker exec -it acalsim-workspace bash
+```
 
-# Copy device files
-cp virtio-device/sst-protocol.h $QEMU_SRC/include/hw/virtio/
-cp virtio-device/virtio-sst.h $QEMU_SRC/include/hw/virtio/
-cp virtio-device/virtio-sst.c $QEMU_SRC/hw/virtio/
+### 1. Build QEMU with VirtIO SST Device
 
-# Update build configuration
-# Add to $QEMU_SRC/hw/virtio/meson.build:
+```bash
+cd /home/user/qemu-build/qemu
+
+# Copy VirtIO SST device files
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/virtio-device/sst-protocol.h \
+   include/hw/virtio/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/virtio-device/virtio-sst.h \
+   include/hw/virtio/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/virtio-device/virtio-sst.c \
+   hw/virtio/
+
+# Add to meson.build
 echo "virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))" \
-    >> $QEMU_SRC/hw/virtio/meson.build
+    >> hw/virtio/meson.build
 
-# Add to $QEMU_SRC/hw/virtio/Kconfig:
-cat >> $QEMU_SRC/hw/virtio/Kconfig <<EOF
+# Add to Kconfig
+cat >> hw/virtio/Kconfig <<EOF
+
 config VIRTIO_SST
     bool
     default y
     depends on VIRTIO
 EOF
 
-# Rebuild QEMU
-cd $QEMU_SRC/build
-../configure --target-list=riscv64-softmmu
+# Configure and build QEMU
+mkdir -p build && cd build
+../configure --target-list=riscv64-softmmu --enable-virtfs
 make -j$(nproc)
+
+# Verify QEMU built successfully
+./qemu-system-riscv64 --version
 ```
 
-### 2. Build Linux Kernel
+### 2. Build RISC-V Linux Kernel
 
 ```bash
-# Get RISC-V Linux kernel
-git clone https://github.com/torvalds/linux.git
+cd /home/user
+
+# Clone Linux kernel (if not already present)
+if [ ! -d linux ]; then
+    git clone --depth 1 --branch v6.1 https://github.com/torvalds/linux.git
+fi
+
 cd linux
-git checkout v6.1  # Or latest stable
 
-# Configure for RISC-V
+# Configure for RISC-V with VirtIO
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
-make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
 
-# Enable VirtIO support:
-#   Device Drivers -> Virtio drivers -> PCI driver for virtio devices
-#   Device Drivers -> Block devices -> Virtio block driver
+# Enable VirtIO devices
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
+# Or use sed to enable required options:
+sed -i 's/# CONFIG_VIRTIO_PCI is not set/CONFIG_VIRTIO_PCI=y/' .config
+sed -i 's/# CONFIG_VIRTIO_BLK is not set/CONFIG_VIRTIO_BLK=y/' .config
 
 # Build kernel
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc)
 
-# Output: arch/riscv/boot/Image (uncompressed kernel)
-cp arch/riscv/boot/Image ../vmlinux
+# Kernel image is at: arch/riscv/boot/Image
+ls -lh arch/riscv/boot/Image
 ```
 
 ### 3. Build Kernel Driver
 
 ```bash
-cd drivers
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/drivers
 
-# Build for current kernel
-make KDIR=/path/to/linux
-
-# Or cross-compile
+# Build against the kernel we just built
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- \
-     KDIR=/path/to/linux
+     KDIR=/home/user/linux
 
 # Output: virtio-sst.ko
+ls -lh virtio-sst.ko
 ```
 
 ### 4. Build Test Applications
 
 ```bash
-cd rootfs/apps
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps
 
 # Cross-compile for RISC-V
 make CROSS_COMPILE=riscv64-linux-gnu-
 
-# Output: sst-test
+# Output: sst-test (RISC-V binary)
+file sst-test  # Should show: RISC-V 64-bit LSB executable
 ```
 
-### 5. Create Root Filesystem
-
-Create a minimal root filesystem with BusyBox:
+### 5. Build Root Filesystem
 
 ```bash
+cd /home/user
+
 # Download and build BusyBox
 wget https://busybox.net/downloads/busybox-1.36.0.tar.bz2
 tar xf busybox-1.36.0.tar.bz2
@@ -159,54 +162,70 @@ cd busybox-1.36.0
 
 # Configure for static build
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
-make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
-# Enable: Settings -> Build static binary
+# Enable static build
+sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
 
-# Build
+# Build BusyBox
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc)
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- install
 
 # Create rootfs structure
-mkdir -p rootfs
-cd rootfs
+mkdir -p /home/user/rootfs
+cd /home/user/rootfs
+cp -a /home/user/busybox-1.36.0/_install/* .
+
+# Create directory structure
 mkdir -p bin sbin etc proc sys dev lib apps
 
-# Copy BusyBox
-cp -a ../_install/* .
-
 # Copy init script
-cp /path/to/qemu-acalsim-sst-linux/rootfs/init init
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/init .
 chmod +x init
 
 # Copy kernel driver
-cp /path/to/qemu-acalsim-sst-linux/drivers/virtio-sst.ko .
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/drivers/virtio-sst.ko .
 
 # Copy test applications
-cp /path/to/qemu-acalsim-sst-linux/rootfs/apps/sst-test apps/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps/sst-test apps/
+chmod +x apps/sst-test
+
+# Create device nodes
+sudo mknod -m 666 dev/null c 1 3
+sudo mknod -m 666 dev/console c 5 1
 
 # Create initramfs
-find . | cpio -o -H newc | gzip > ../initramfs.cpio.gz
+find . | cpio -o -H newc | gzip > /home/user/initramfs.cpio.gz
+
+echo "Initramfs created: /home/user/initramfs.cpio.gz"
+ls -lh /home/user/initramfs.cpio.gz
 ```
 
 ### 6. Build SST Components
 
 ```bash
-# Use existing ACALSim device components
-cd ../../acalsim-device
-make
+cd /home/user/projects/acalsim/src/acalsim-device
 
-# Verify libacalsim.so is built
-ls -l libacalsim.so
+# Set SST environment
+export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install
+export PATH=$SST_CORE_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
+
+# Build SST device components
+make clean && make
+
+# Verify library built
+ls -lh libacalsim.so
 ```
 
 ### 7. Run Your First Simulation
 
-**Terminal 1 - Start SST:**
+**Terminal 1 - Start SST** (in container):
 ```bash
-cd sst-config
+docker exec -it acalsim-workspace bash
+
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/sst-config
 
 # Set environment
-export SST_CORE_HOME=/path/to/sst-core-install
+export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install
 export PATH=$SST_CORE_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
 
@@ -214,17 +233,30 @@ export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
 sst linux_basic.py
 ```
 
-**Terminal 2 - Start QEMU:**
+**Terminal 2 - Start QEMU** (in same container):
 ```bash
-cd qemu-config
+docker exec -it acalsim-workspace bash
+
+cd /home/user
 
 # Set paths
-export QEMU=/path/to/qemu/build/qemu-system-riscv64
-export KERNEL=/path/to/vmlinux
-export INITRD=/path/to/initramfs.cpio.gz
+export QEMU=/home/user/qemu-build/qemu/build/qemu-system-riscv64
+export KERNEL=/home/user/linux/arch/riscv/boot/Image
+export INITRD=/home/user/initramfs.cpio.gz
+export SOCKET=/tmp/qemu-sst-linux.sock
 
 # Launch QEMU
-./run-linux.sh
+$QEMU \
+    -machine virt \
+    -cpu rv64 \
+    -m 2G \
+    -smp 4 \
+    -nographic \
+    -kernel $KERNEL \
+    -initrd $INITRD \
+    -append "console=ttyS0 earlycon=sbi" \
+    -device virtio-sst-device,socket=$SOCKET,device-id=0 \
+    -serial mon:stdio
 ```
 
 ### 8. Test SST Device
@@ -246,7 +278,7 @@ SST device found: /dev/sst0
 Run the test application:
 
 ```bash
-# In QEMU console
+# In QEMU console (Terminal 2)
 /apps/sst-test
 
 # Output:
@@ -258,49 +290,115 @@ Opening device: /dev/sst0
 Device opened successfully (fd=3)
 
 [TEST] NOOP Request
-  Sending NOOP request...
   Status: OK
-  User data: 0x1234
   PASSED
 
 [TEST] ECHO Request
-  Sending ECHO request: "Hello SST!"
   Status: OK
   Echo data: "Hello SST!"
   PASSED
 
 ...
+
+Test Summary: 5/5 PASSED
 ```
 
 ## Common Workflows
 
+### Quick Script for Container Setup
+
+Save this as `setup-container.sh` on your host:
+
+```bash
+#!/bin/bash
+# Setup script - Run on HOST
+
+docker exec acalsim-workspace bash -c "
+    # Install toolchains
+    apt-get update && apt-get install -y \
+        gcc-riscv64-linux-gnu \
+        g++-riscv64-linux-gnu \
+        binutils-riscv64-linux-gnu \
+        bc bison flex libssl-dev libelf-dev libncurses-dev \
+        libglib2.0-dev libpixman-1-dev ninja-build wget
+
+    echo 'Toolchains installed successfully'
+    riscv64-linux-gnu-gcc --version
+"
+```
+
+### Quick Build Script
+
+Save this as `build-all.sh` in the container:
+
+```bash
+#!/bin/bash
+# Build script - Run INSIDE container
+
+set -e
+
+echo "Building all components..."
+
+# Build QEMU
+echo "1. Building QEMU..."
+cd /home/user/qemu-build/qemu/build
+ninja
+
+# Build Linux kernel
+echo "2. Building Linux kernel..."
+cd /home/user/linux
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j$(nproc)
+
+# Build kernel driver
+echo "3. Building kernel driver..."
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/drivers
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- \
+     KDIR=/home/user/linux clean all
+
+# Build test apps
+echo "4. Building test applications..."
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps
+make CROSS_COMPILE=riscv64-linux-gnu- clean all
+
+# Build SST components
+echo "5. Building SST components..."
+export SST_CORE_HOME=/home/user/projects/acalsim/sst-core/sst-core-install
+export PATH=$SST_CORE_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$SST_CORE_HOME/lib/sstcore:$LD_LIBRARY_PATH
+
+cd /home/user/projects/acalsim/src/acalsim-device
+make clean && make
+
+echo "All components built successfully!"
+```
+
 ### Testing Device Connectivity
 
 ```bash
-# Check if device exists
+# Inside QEMU Linux
 ls -l /dev/sst*
-
-# Check kernel module
 lsmod | grep virtio_sst
-
-# View kernel messages
 dmesg | grep virtio-sst
-
-# Simple test
-echo "test" > /dev/sst0
 ```
 
-### Running Compute Simulations
+### Running Custom Applications
 
-Create a custom application:
+Create app in container:
 
-```c
+```bash
+# On host, edit file
+cat > /path/to/acalsim-workspace/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps/my-app.c <<'EOF'
 #include <fcntl.h>
 #include <unistd.h>
-#include "sst-protocol.h"
+#include <stdio.h>
+#include "../../virtio-device/sst-protocol.h"
 
 int main() {
     int fd = open("/dev/sst0", O_RDWR);
+    if (fd < 0) {
+        perror("open");
+        return 1;
+    }
 
     struct SSTRequest req = {
         .type = SST_REQ_COMPUTE,
@@ -312,116 +410,105 @@ int main() {
     struct SSTResponse resp;
     read(fd, &resp, sizeof(resp));
 
-    printf("Simulated cycles: %lu\n",
-           resp.payload.compute.cycles);
+    printf("Simulated cycles: %lu\n", resp.payload.compute.cycles);
 
     close(fd);
     return 0;
 }
-```
+EOF
 
-Compile and run:
+# Build in container
+docker exec acalsim-workspace bash -c "
+    cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/rootfs/apps
+    riscv64-linux-gnu-gcc -o my-app my-app.c -I../../virtio-device
+    file my-app
+"
 
-```bash
-riscv64-linux-gnu-gcc -o my-app my-app.c \
-    -I../../virtio-device
-
-# Copy to rootfs and run in QEMU
-```
-
-### Multi-Device Setup
-
-Configure multiple SST devices:
-
-**SST configuration** (`linux_multi.py`):
-```python
-for i in range(4):
-    dev = sst.Component(f"sst_device_{i}",
-                       "acalsim.ACALSimDeviceComponent")
-    dev.addParams({
-        "socket_path": f"/tmp/qemu-sst-{i}.sock",
-        "device_id": i
-    })
-```
-
-**QEMU launch**:
-```bash
-$QEMU ... \
-    -device virtio-sst-device,socket=/tmp/qemu-sst-0.sock,device-id=0 \
-    -device virtio-sst-device,socket=/tmp/qemu-sst-1.sock,device-id=1 \
-    -device virtio-sst-device,socket=/tmp/qemu-sst-2.sock,device-id=2 \
-    -device virtio-sst-device,socket=/tmp/qemu-sst-3.sock,device-id=3
-```
-
-Access from Linux:
-```bash
-/apps/sst-test /dev/sst0  # Device 0
-/apps/sst-test /dev/sst1  # Device 1
-...
+# Rebuild initramfs with new app
+# (Follow step 5 again)
 ```
 
 ## Troubleshooting
 
-### QEMU doesn't start
+### Issue: QEMU doesn't start
 
 **Error**: `Failed to open socket: /tmp/qemu-sst-linux.sock`
 
-**Solution**: Start SST first, it creates the socket server.
+**Solution**: Start SST first in Terminal 1, then QEMU in Terminal 2.
 
-### Device not found in Linux
+### Issue: Device not found in Linux
 
-**Error**: `/dev/sst0: No such file or directory`
+**Check these in order:**
 
-**Possible causes**:
-1. VirtIO device not configured in QEMU
-   - Check QEMU command line has `-device virtio-sst-device`
-2. Kernel driver not loaded
-   - Run `insmod /virtio-sst.ko`
-   - Check `dmesg | grep virtio-sst`
-3. SST not connected
-   - Check SST is running
-   - Verify socket path matches
+1. **Is VirtIO device configured?**
+   ```bash
+   # In QEMU command, verify:
+   -device virtio-sst-device,socket=/tmp/qemu-sst-linux.sock
+   ```
 
-### Request timeout
+2. **Is kernel driver loaded?**
+   ```bash
+   # In QEMU Linux
+   lsmod | grep virtio_sst
+   # If not loaded:
+   insmod /virtio-sst.ko
+   ```
 
-**Error**: `virtio-sst: Request timed out`
+3. **Is SST connected?**
+   ```bash
+   # Check SST terminal for "Connected" message
+   ```
 
-**Solution**:
-- Ensure SST is processing requests
-- Check SST component configuration
-- Verify socket communication is working
-- Check SST logs for errors
+### Issue: Kernel module won't load
 
-### Kernel build failures
+**Error**: `Unknown symbol in module`
 
-**Error**: `virtio_device_id` undeclared
-
-**Solution**: Make sure VirtIO support is enabled in kernel config:
+**Solution**: Rebuild driver against exact kernel you're running:
 ```bash
-make menuconfig
-# Enable: Device Drivers -> Virtio drivers
+# In container
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/drivers
+make clean
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- KDIR=/home/user/linux
+```
+
+### Issue: Can't access container
+
+```bash
+# Check if container is running
+docker ps | grep acalsim-workspace
+
+# If not running
+docker start acalsim-workspace
+
+# If container doesn't exist
+# Recreate it following your container setup instructions
 ```
 
 ## Next Steps
 
 - Read [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for architecture details
-- Explore example SST configurations in `sst-config/`
-- Review VirtIO protocol in `virtio-device/sst-protocol.h`
-- Study kernel driver implementation in `drivers/sst-virtio.c`
-- Try bare-metal variant: `../qemu-acalsim-sst-baremetal/`
-- Try HSA variant: `../qemu-acalsim-sst-baremetal-HSA/`
+- Explore SST configurations in `sst-config/`
+- Study VirtIO protocol in `virtio-device/sst-protocol.h`
+- Try modifying test applications
+- Experiment with multi-device setups
+- Compare with bare-metal variant: `../qemu-acalsim-sst-baremetal/`
 
-## Additional Resources
+## Container Management Tips
 
-- [Linux VirtIO Documentation](https://www.kernel.org/doc/html/latest/driver-api/virtio/virtio.html)
-- [QEMU RISC-V Documentation](https://www.qemu.org/docs/master/system/target-riscv.html)
-- [SST Documentation](http://sst-simulator.org/SSTPages/SSTMainDocumentation/)
-- [RISC-V Specifications](https://riscv.org/technical/specifications/)
+```bash
+# Save container state (if you made significant changes)
+docker commit acalsim-workspace acalsim-workspace:linux-ready
+
+# Check container disk usage
+docker exec acalsim-workspace df -h
+
+# Clean up build artifacts
+docker exec acalsim-workspace bash -c "
+    cd /home/user/linux && make clean
+    cd /home/user/qemu-build/qemu/build && ninja clean
+"
+```
 
 ---
 
-**Need Help?**
-- Check kernel logs: `dmesg | grep -i sst`
-- Check QEMU logs: Run with `-d guest_errors,unimp`
-- Check SST output for connection status
-- Review component README files for detailed information
+**All commands in this guide are run inside the `acalsim-workspace` Docker container** unless explicitly marked as "on host".
