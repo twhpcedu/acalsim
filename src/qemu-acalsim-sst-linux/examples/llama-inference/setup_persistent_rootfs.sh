@@ -76,57 +76,163 @@ echo ""
 # Use qemu-nbd to format the disk without booting QEMU
 sudo modprobe nbd max_part=8 2>/dev/null || true
 
-if ! command -v qemu-nbd &> /dev/null; then
-    echo -e "${YELLOW}⚠${NC}  qemu-nbd not available, using alternative method"
-    echo ""
-    echo "You'll need to format the disk manually:"
-    echo "  1. Boot QEMU with both the initramfs and this disk"
-    echo "  2. Run: mkfs.ext4 /dev/vdb"
-    echo "  3. Run: mount /dev/vdb /mnt"
-    echo "  4. Run: cd /mnt && tar -xzf /rootfs.tar.gz"
-    echo ""
-    echo "Creating rootfs tarball for manual installation..."
-
-    cd "$ROOTFS_SOURCE"
-    tar czf /home/user/rootfs.tar.gz .
-
-    echo -e "${GREEN}✓${NC} Created /home/user/rootfs.tar.gz"
-    echo ""
-    echo "Disk image created but not populated."
-    echo "Follow manual steps above to populate it."
-    exit 0
+# Check if qemu-nbd is available AND NBD is actually usable
+NBD_AVAILABLE=false
+if command -v qemu-nbd &> /dev/null; then
+    # Check if NBD device exists
+    if [ -e /dev/nbd0 ]; then
+        NBD_AVAILABLE=true
+    fi
 fi
 
-# Connect disk via NBD
-sudo qemu-nbd --connect=/dev/nbd0 "$ROOTFS_DISK"
+if [ "$NBD_AVAILABLE" = "false" ]; then
+    echo -e "${YELLOW}⚠${NC}  NBD (Network Block Device) not available in this environment"
+    echo ""
+    echo "This is common in Docker containers without privileged mode."
+    echo "Using alternative setup method that boots QEMU to populate the disk..."
+    echo ""
 
-# Format
-echo "Formatting as ext4..."
-sudo mkfs.ext4 /dev/nbd0
+    # Create a setup script that boots QEMU and populates the disk
+    SETUP_SCRIPT="/tmp/setup_rootfs_helper.sh"
+    cat > "$SETUP_SCRIPT" << 'EOFHELPER'
+#!/bin/bash
+# Helper script to populate persistent rootfs via QEMU
+set -e
 
-# Mount
-mkdir -p "$TEMP_MOUNT"
-sudo mount /dev/nbd0 "$TEMP_MOUNT"
+ROOTFS_SOURCE=${ROOTFS_SOURCE:-/home/user/rootfs}
+ROOTFS_DISK=${ROOTFS_DISK:-/home/user/rootfs-persistent.qcow2}
+QEMU_BIN=${QEMU_BIN:-/home/user/qemu-build/qemu/build/qemu-system-riscv64}
+KERNEL=${KERNEL:-/home/user/linux/arch/riscv/boot/Image}
+INITRAMFS=${INITRAMFS:-/home/user/initramfs.cpio.gz}
 
-# Copy rootfs
+echo "Creating rootfs tarball..."
+cd "$ROOTFS_SOURCE"
+tar czf /tmp/rootfs-install.tar.gz .
+
+echo "Creating setup commands file..."
+cat > /tmp/setup_commands.txt << 'EOFCMD'
+echo "=== Formatting disk ==="
+mkfs.ext4 -F /dev/vda
+echo "=== Mounting disk ==="
+mkdir -p /mnt/rootfs
+mount /dev/vda /mnt/rootfs
+echo "=== Extracting rootfs ==="
+cd /mnt/rootfs
+tar xzf /tmp/rootfs-install.tar.gz
+echo "=== Installing LLAMA app ==="
+mkdir -p /mnt/rootfs/apps/llama-inference
+cd /tmp/llama-app
+cp llama_inference.py /mnt/rootfs/apps/llama-inference/
+cp llama_sst_backend.py /mnt/rootfs/apps/llama-inference/
+cp test_prompts.txt /mnt/rootfs/apps/llama-inference/
+cp README.md /mnt/rootfs/apps/llama-inference/
+chmod +x /mnt/rootfs/apps/llama-inference/llama_inference.py
+echo "=== Syncing and unmounting ==="
+sync
+umount /mnt/rootfs
+echo "=== SETUP COMPLETE ==="
+poweroff -f
+EOFCMD
+
+echo "Booting QEMU to populate disk..."
+echo "(This will take a moment...)"
 echo ""
-echo "Copying rootfs contents..."
-sudo cp -a "$ROOTFS_SOURCE"/* "$TEMP_MOUNT/"
 
-# Add LLAMA app
-echo "Installing LLAMA app..."
-sudo mkdir -p "$TEMP_MOUNT/apps/llama-inference"
-sudo cp llama_inference.py "$TEMP_MOUNT/apps/llama-inference/"
-sudo cp llama_sst_backend.py "$TEMP_MOUNT/apps/llama-inference/"
-sudo cp test_prompts.txt "$TEMP_MOUNT/apps/llama-inference/"
-sudo cp README.md "$TEMP_MOUNT/apps/llama-inference/"
-sudo chmod +x "$TEMP_MOUNT/apps/llama-inference/llama_inference.py"
+# Add setup commands to initramfs
+TEMP_INITRAMFS="/tmp/initramfs-with-setup.cpio.gz"
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+gunzip -c "$INITRAMFS" | cpio -idm 2>/dev/null
 
-echo -e "${GREEN}✓${NC} LLAMA app installed"
+# Add tarball and LLAMA app files
+cp /tmp/rootfs-install.tar.gz ./tmp/
+mkdir -p ./tmp/llama-app
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference/llama_inference.py ./tmp/llama-app/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference/llama_sst_backend.py ./tmp/llama-app/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference/test_prompts.txt ./tmp/llama-app/
+cp /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference/README.md ./tmp/llama-app/
 
-# Unmount
-sudo umount "$TEMP_MOUNT"
-sudo qemu-nbd --disconnect /dev/nbd0
+# Modify init to run setup commands
+mv init init.orig
+cat > init << 'EOFINIT'
+#!/bin/sh
+# Modified init for rootfs setup
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devtmpfs none /dev
+echo "Running rootfs setup..."
+sh /tmp/setup_commands.txt
+EOFINIT
+chmod +x init
+
+# Rebuild initramfs
+find . | cpio -o -H newc 2>/dev/null | gzip > "$TEMP_INITRAMFS"
+
+# Boot QEMU
+$QEMU_BIN \
+    -M virt \
+    -cpu rv64 \
+    -smp 2 \
+    -m 4G \
+    -kernel "$KERNEL" \
+    -initrd "$TEMP_INITRAMFS" \
+    -append "console=ttyS0 earlycon=sbi rdinit=/init" \
+    -drive file="$ROOTFS_DISK",if=none,id=rootfs,format=qcow2 \
+    -device virtio-blk-device,drive=rootfs \
+    -nographic \
+    -serial mon:stdio
+
+# Cleanup
+rm -rf "$TEMP_DIR" /tmp/rootfs-install.tar.gz "$TEMP_INITRAMFS" /tmp/setup_commands.txt
+EOFHELPER
+
+    chmod +x "$SETUP_SCRIPT"
+
+    echo "Populating disk via QEMU..."
+    bash "$SETUP_SCRIPT"
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} Disk populated successfully"
+        rm -f "$SETUP_SCRIPT"
+    else
+        echo -e "${RED}✗${NC} Failed to populate disk"
+        echo "Setup script saved at: $SETUP_SCRIPT"
+        exit 1
+    fi
+else
+    echo "Using NBD to format and populate disk..."
+
+    # Connect disk via NBD
+    sudo qemu-nbd --connect=/dev/nbd0 "$ROOTFS_DISK"
+
+    # Format
+    echo "Formatting as ext4..."
+    sudo mkfs.ext4 /dev/nbd0
+
+    # Mount
+    mkdir -p "$TEMP_MOUNT"
+    sudo mount /dev/nbd0 "$TEMP_MOUNT"
+
+    # Copy rootfs
+    echo ""
+    echo "Copying rootfs contents..."
+    sudo cp -a "$ROOTFS_SOURCE"/* "$TEMP_MOUNT/"
+
+    # Add LLAMA app
+    echo "Installing LLAMA app..."
+    sudo mkdir -p "$TEMP_MOUNT/apps/llama-inference"
+    sudo cp llama_inference.py "$TEMP_MOUNT/apps/llama-inference/"
+    sudo cp llama_sst_backend.py "$TEMP_MOUNT/apps/llama-inference/"
+    sudo cp test_prompts.txt "$TEMP_MOUNT/apps/llama-inference/"
+    sudo cp README.md "$TEMP_MOUNT/apps/llama-inference/"
+    sudo chmod +x "$TEMP_MOUNT/apps/llama-inference/llama_inference.py"
+
+    echo -e "${GREEN}✓${NC} LLAMA app installed"
+
+    # Unmount
+    sudo umount "$TEMP_MOUNT"
+    sudo qemu-nbd --disconnect /dev/nbd0
+fi
 
 echo -e "${GREEN}✓${NC} Disk populated and unmounted"
 
