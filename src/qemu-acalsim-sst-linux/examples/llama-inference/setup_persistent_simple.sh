@@ -75,7 +75,18 @@ echo ""
 echo "Preparing filesystem contents..."
 
 STAGING_DIR=$(mktemp -d)
-cp -a "$ROOTFS_SOURCE"/* "$STAGING_DIR/"
+
+# Copy rootfs, excluding /dev (device files need special privileges)
+# We'll let devtmpfs populate /dev at boot time
+cd "$ROOTFS_SOURCE"
+for item in *; do
+    if [ "$item" != "dev" ]; then
+        cp -a "$item" "$STAGING_DIR/" 2>/dev/null || true
+    fi
+done
+
+# Create empty dev directory
+mkdir -p "$STAGING_DIR/dev"
 
 # Add LLAMA app
 mkdir -p "$STAGING_DIR/apps/llama-inference"
