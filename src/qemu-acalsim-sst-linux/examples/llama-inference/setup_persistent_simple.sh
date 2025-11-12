@@ -59,8 +59,8 @@ echo "Installing genext2fs..."
 
 # Install genext2fs if not available
 if ! command -v genext2fs &> /dev/null; then
-    apt-get update -qq
-    apt-get install -y -qq genext2fs > /dev/null 2>&1
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq genext2fs > /dev/null 2>&1
 
     if ! command -v genext2fs &> /dev/null; then
         echo -e "${RED}✗${NC} Failed to install genext2fs"
