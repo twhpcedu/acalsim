@@ -187,13 +187,16 @@ echo ""
 echo "============================================================"
 echo ""
 
+# Kernel command line
+CMDLINE="console=ttyS0 earlycon=sbi rdinit=/sbin/init"
+
 # Show command (for debugging)
 if [ "${DEBUG:-0}" = "1" ]; then
     echo "QEMU Command:"
     echo "$QEMU_BIN -M virt -cpu rv64 -smp $CPUS -m $MEMORY \\"
     echo "  -kernel $KERNEL \\"
     echo "  -initrd $INITRAMFS \\"
-    echo "  -append \"console=ttyS0 earlycon=sbi\" \\"
+    echo "  -append \"$CMDLINE\" \\"
     echo "  -nographic \\"
     echo "  -device virtio-sst-device,socket=$SOCKET_PATH \\"
     echo "  $MODEL_DISK_ARG"
@@ -210,7 +213,7 @@ if [ -n "$MODEL_DISK_ARG" ]; then
         -m $MEMORY \
         -kernel "$KERNEL" \
         -initrd "$INITRAMFS" \
-        -append "console=ttyS0 earlycon=sbi" \
+        -append "$CMDLINE" \
         -nographic \
         -device virtio-sst-device,socket=$SOCKET_PATH \
         $MODEL_DISK_ARG
@@ -222,7 +225,7 @@ else
         -m $MEMORY \
         -kernel "$KERNEL" \
         -initrd "$INITRAMFS" \
-        -append "console=ttyS0 earlycon=sbi" \
+        -append "$CMDLINE" \
         -nographic \
         -device virtio-sst-device,socket=$SOCKET_PATH
 fi
