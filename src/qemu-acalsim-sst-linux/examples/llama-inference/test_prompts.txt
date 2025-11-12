@@ -1,0 +1,10 @@
+Explain quantum computing in simple terms.
+What is machine learning?
+How do neural networks work?
+Describe the theory of relativity.
+What are the applications of artificial intelligence?
+How does blockchain technology work?
+Explain the concept of entropy in thermodynamics.
+What is the difference between classical and quantum computers?
+How do large language models process text?
+What are the key challenges in developing AGI?
