@@ -139,8 +139,12 @@ For developers:
 ## Documentation
 
 - **[GETTING_STARTED.md](GETTING_STARTED.md)**: Complete setup and usage guide
-- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**: Architecture and implementation details
-- **[API_REFERENCE.md](API_REFERENCE.md)**: Kernel driver and user-space API
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: From-scratch architecture tutorial
+- **[APP_DEVELOPMENT.md](APP_DEVELOPMENT.md)**: Writing Linux applications for SST devices
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**: Extending the kernel driver and QEMU device
+- **[DEPLOYMENT.md](DEPLOYMENT.md)**: Single-server vs multi-server deployment
+- **[ROOTFS_MANAGEMENT.md](ROOTFS_MANAGEMENT.md)**: Installing packages and managing the filesystem
+- **[BUILD_NOTES.md](BUILD_NOTES.md)**: Docker vs cross-compile workflows
 
 ## Related Projects
 
