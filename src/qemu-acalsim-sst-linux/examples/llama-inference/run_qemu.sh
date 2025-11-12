@@ -187,25 +187,42 @@ echo ""
 echo "============================================================"
 echo ""
 
-# Build QEMU command
-QEMU_CMD="$QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp $CPUS \
-    -m $MEMORY \
-    -kernel $KERNEL \
-    -initrd $INITRAMFS \
-    -append \"console=ttyS0 root=/dev/ram rdinit=/sbin/init\" \
-    -nographic \
-    -device virtio-sst-device,socket=$SOCKET_PATH \
-    $MODEL_DISK_ARG"
-
 # Show command (for debugging)
 if [ "${DEBUG:-0}" = "1" ]; then
     echo "QEMU Command:"
-    echo "$QEMU_CMD"
+    echo "$QEMU_BIN -M virt -cpu rv64 -smp $CPUS -m $MEMORY \\"
+    echo "  -kernel $KERNEL \\"
+    echo "  -initrd $INITRAMFS \\"
+    echo "  -append \"console=ttyS0 earlycon=sbi\" \\"
+    echo "  -nographic \\"
+    echo "  -device virtio-sst-device,socket=$SOCKET_PATH \\"
+    echo "  $MODEL_DISK_ARG"
     echo ""
 fi
 
 # Run QEMU
-exec $QEMU_CMD
+# Note: Use exec with proper argument array to avoid quoting issues
+if [ -n "$MODEL_DISK_ARG" ]; then
+    exec $QEMU_BIN \
+        -M virt \
+        -cpu rv64 \
+        -smp $CPUS \
+        -m $MEMORY \
+        -kernel "$KERNEL" \
+        -initrd "$INITRAMFS" \
+        -append "console=ttyS0 earlycon=sbi" \
+        -nographic \
+        -device virtio-sst-device,socket=$SOCKET_PATH \
+        $MODEL_DISK_ARG
+else
+    exec $QEMU_BIN \
+        -M virt \
+        -cpu rv64 \
+        -smp $CPUS \
+        -m $MEMORY \
+        -kernel "$KERNEL" \
+        -initrd "$INITRAMFS" \
+        -append "console=ttyS0 earlycon=sbi" \
+        -nographic \
+        -device virtio-sst-device,socket=$SOCKET_PATH
+fi

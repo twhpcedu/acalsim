@@ -3,8 +3,14 @@
 LLAMA 2 Inference SST Configuration
 
 Creates a simulation with:
-- 1 VirtIO device (connects to QEMU Linux)
-- 4 AI accelerators (Attention, FFN, Embedding, General)
+- 1 VirtIO device (connects to QEMU Linux and processes compute requests)
+
+The VirtIODevice handles compute requests from Linux applications
+via /dev/sst0. The Python backend (llama_sst_backend.py) sends
+compute requests with different latency models to simulate:
+  - Attention operations (latency_model=0)
+  - FFN operations (latency_model=1)
+  - Embedding operations (latency_model=2)
 
 Copyright 2023-2025 Playlab/ACAL
 Licensed under the Apache License, Version 2.0
@@ -15,40 +21,17 @@ import os
 
 # Configuration
 SOCKET_PATH = "/tmp/qemu-sst-llama.sock"
-
-# Accelerator Parameters
-# These latencies model different neural network operations
-ACCEL_CONFIG = {
-    "attention": {
-        "name": "Attention Accelerator",
-        "latency": "1us",      # Self-attention computation
-        "description": "Multi-head attention operations"
-    },
-    "ffn": {
-        "name": "FFN Accelerator",
-        "latency": "500ns",    # Feed-forward network
-        "description": "Dense layer computations"
-    },
-    "embedding": {
-        "name": "Embedding Accelerator",
-        "latency": "100ns",    # Token embedding lookup
-        "description": "Token embedding table lookups"
-    },
-    "general": {
-        "name": "General Compute",
-        "latency": "200ns",    # Other operations
-        "description": "Normalization, activation functions"
-    }
-}
+DEVICE_ID = 0
 
 print("=" * 60)
 print("LLAMA 2 Inference SST Configuration")
 print("=" * 60)
 print(f"Socket: {SOCKET_PATH}")
+print(f"Device ID: {DEVICE_ID}")
 print("")
-print("Accelerators:")
-for idx, (accel_type, config) in enumerate(ACCEL_CONFIG.items()):
-    print(f"  [{idx}] {config['name']:20s} - {config['latency']:8s} - {config['description']}")
+print("The VirtIODevice will process compute requests from Linux.")
+print("Different operations (attention, FFN, embedding) are modeled")
+print("via the latency_model parameter in compute requests.")
 print("=" * 60)
 
 # Clean up existing socket
@@ -59,43 +42,15 @@ if os.path.exists(SOCKET_PATH):
 print("\nCreating components...")
 
 # VirtIO Device (connects to QEMU Linux)
+# This single device handles all compute requests from the LLAMA inference app
 print("VirtIO Device: virtio_llama")
 virtio_dev = sst.Component("virtio_llama", "acalsim.VirtIODevice")
 virtio_dev.addParams({
     "socket_path": SOCKET_PATH,
-    "device_id": "0",
-    "verbose": "1",
+    "device_id": str(DEVICE_ID),
+    "verbose": "2",  # Increased verbosity to see request processing
     "clock": "2GHz"
 })
-
-# Create AI Accelerator Components
-accelerators = []
-accel_list = list(ACCEL_CONFIG.items())
-
-for idx, (accel_type, config) in enumerate(accel_list):
-    comp_name = f"accel_{accel_type}"
-    print(f"Accelerator {idx}: {comp_name} ({config['name']}, latency={config['latency']})")
-
-    accel = sst.Component(comp_name, "acalsim.ComputeDevice")
-    accel.addParams({
-        "clock": "2GHz",
-        "verbose": "1",
-        "compute_latency": config["latency"],
-        "device_id": str(idx)
-    })
-    accelerators.append((comp_name, accel))
-
-print("\nConnecting components via SST links...")
-
-# Connect VirtIO to each accelerator
-for idx, (comp_name, accel) in enumerate(accelerators):
-    link_name = f"link_virtio_{comp_name}"
-    link = sst.Link(link_name)
-    link.connect(
-        (virtio_dev, f"device_port_{idx}", "10ns"),
-        (accel, "cpu_port", "10ns")
-    )
-    print(f"  {link_name}: virtio_llama <-> {comp_name}")
 
 # Statistics
 sst.setStatisticLoadLevel(5)
