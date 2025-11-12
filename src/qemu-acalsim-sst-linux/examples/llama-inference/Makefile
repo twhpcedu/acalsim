@@ -15,8 +15,14 @@ install:
 	cp llama_inference.py $(INSTALL_DIR)/
 	cp llama_sst_backend.py $(INSTALL_DIR)/
 	cp test_prompts.txt $(INSTALL_DIR)/
+	cp run_sst.sh $(INSTALL_DIR)/
+	cp run_qemu.sh $(INSTALL_DIR)/
+	cp sst_config_llama.py $(INSTALL_DIR)/
 	cp README.md $(INSTALL_DIR)/
 	chmod +x $(INSTALL_DIR)/llama_inference.py
+	chmod +x $(INSTALL_DIR)/run_sst.sh
+	chmod +x $(INSTALL_DIR)/run_qemu.sh
+	chmod +x $(INSTALL_DIR)/sst_config_llama.py
 	@echo "Installation complete"
 
 deploy: install
