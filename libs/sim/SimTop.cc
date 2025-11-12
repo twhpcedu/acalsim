@@ -469,6 +469,9 @@ void SimTopBase::run() {
 
 			MT_DEBUG_CLASS_INFO << "Control Thread Phase 2 ends ";
 
+			// Flush all logs from this tick to ensure proper ordering in multi-threaded output
+			std::cout.flush();
+
 			this->threadManager->finishPhase2();
 
 #ifdef ACALSIM_STATISTICS
