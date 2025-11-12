@@ -1,7 +1,9 @@
 # Makefile for LLAMA Inference Example
 
-ROOTFS ?= /home/user/rootfs-full
+ROOTFS ?= /home/user/rootfs
 INSTALL_DIR = $(ROOTFS)/apps/llama-inference
+INITRAMFS_BASE ?= /home/user/initramfs.cpio.gz
+INITRAMFS_OUT ?= /home/user/initramfs-with-llama.cpio.gz
 
 .PHONY: all install deploy clean help
 
@@ -24,12 +26,29 @@ install:
 	chmod +x $(INSTALL_DIR)/run_qemu.sh
 	chmod +x $(INSTALL_DIR)/sst_config_llama.py
 	@echo "Installation complete"
+	@echo ""
+	@echo "Files installed to: $(INSTALL_DIR)"
+	@echo ""
+	@echo "To use with QEMU:"
+	@echo "  1. Build a complete rootfs with full Linux system first"
+	@echo "  2. Run 'make deploy' to create initramfs"
+	@echo "  3. Or use the existing initramfs.cpio.gz (run_qemu.sh does this)"
 
 deploy: install
-	@echo "Rebuilding initramfs..."
-	cd $(ROOTFS) && find . | cpio -o -H newc 2>/dev/null | gzip > /home/user/initramfs-full.cpio.gz
+	@echo "Creating initramfs with LLAMA app..."
+	@if [ ! -d "$(ROOTFS)/bin" ] || [ ! -d "$(ROOTFS)/sbin" ]; then \
+		echo "ERROR: $(ROOTFS) does not contain a complete Linux filesystem"; \
+		echo "       Missing /bin or /sbin directories"; \
+		echo "       See PYTORCH_LLAMA_SETUP.md for building a complete rootfs"; \
+		exit 1; \
+	fi
+	cd $(ROOTFS) && find . | cpio -o -H newc 2>/dev/null | gzip > $(INITRAMFS_OUT)
 	@echo "Deployment complete"
-	@ls -lh /home/user/initramfs-full.cpio.gz
+	@ls -lh $(INITRAMFS_OUT)
+	@echo ""
+	@echo "To use this initramfs:"
+	@echo "  export INITRAMFS=$(INITRAMFS_OUT)"
+	@echo "  ./run_qemu.sh"
 
 clean:
 	@echo "Nothing to clean"

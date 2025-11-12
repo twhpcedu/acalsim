@@ -54,13 +54,15 @@ if [ "$IN_DOCKER" = true ]; then
     # Docker paths
     QEMU_BIN=${QEMU_BIN:-/home/user/qemu-build/qemu/build/qemu-system-riscv64}
     KERNEL=${KERNEL:-/home/user/linux/arch/riscv/boot/Image}
-    INITRAMFS=${INITRAMFS:-/home/user/initramfs-full.cpio.gz}
+    # Use the working basic initramfs (has full Linux system)
+    # initramfs-full.cpio.gz is incomplete (only has app files)
+    INITRAMFS=${INITRAMFS:-/home/user/initramfs.cpio.gz}
     MODEL_DISK=${MODEL_DISK:-/home/user/models.qcow2}
 else
     # Local paths (adjust as needed)
     QEMU_BIN=${QEMU_BIN:-$HOME/qemu-build/qemu/build/qemu-system-riscv64}
     KERNEL=${KERNEL:-$HOME/linux/arch/riscv/boot/Image}
-    INITRAMFS=${INITRAMFS:-$HOME/initramfs-full.cpio.gz}
+    INITRAMFS=${INITRAMFS:-$HOME/initramfs.cpio.gz}
     MODEL_DISK=${MODEL_DISK:-$HOME/models.qcow2}
 fi
 
