@@ -190,7 +190,8 @@ echo "============================================================"
 echo ""
 
 # Kernel command line
-CMDLINE="console=ttyS0 earlycon=sbi rdinit=/sbin/init"
+# Use /init (custom init script in rootfs) not /sbin/init (busybox inittab)
+CMDLINE="console=ttyS0 earlycon=sbi rdinit=/init"
 
 # Show command (for debugging)
 if [ "${DEBUG:-0}" = "1" ]; then
