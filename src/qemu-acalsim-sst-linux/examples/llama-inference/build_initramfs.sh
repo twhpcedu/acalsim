@@ -36,14 +36,14 @@ echo ""
 
 # Validate rootfs
 if [ ! -d "$ROOTFS" ]; then
-    echo -e "${RED}✗${NC} ROOTFS directory not found: $ROOTFS"
-    exit 1
+	echo -e "${RED}✗${NC} ROOTFS directory not found: $ROOTFS"
+	exit 1
 fi
 
 if [ ! -f "$ROOTFS/init" ]; then
-    echo -e "${RED}✗${NC} ROOTFS missing /init script"
-    echo "This doesn't appear to be a valid rootfs"
-    exit 1
+	echo -e "${RED}✗${NC} ROOTFS missing /init script"
+	echo "This doesn't appear to be a valid rootfs"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} ROOTFS found"
@@ -83,11 +83,11 @@ FILE_COUNT=$(find . -type f | wc -l)
 echo "  Total files: $FILE_COUNT"
 
 # Create initramfs
-find . | cpio -o -H newc 2>/dev/null | gzip > "$OUTPUT"
+find . | cpio -o -H newc 2>/dev/null | gzip >"$OUTPUT"
 
 if [ ! -f "$OUTPUT" ]; then
-    echo -e "${RED}✗${NC} Failed to create initramfs"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to create initramfs"
+	exit 1
 fi
 
 OUTPUT_SIZE=$(du -h "$OUTPUT" | cut -f1)
@@ -101,13 +101,13 @@ cd "$VERIFY_DIR"
 gunzip -c "$OUTPUT" | cpio -idm 2>/dev/null
 
 if [ -f "init" ] && [ -f "apps/llama-inference/llama_inference.py" ]; then
-    echo -e "${GREEN}✓${NC} Initramfs verified"
-    echo "  Contains:"
-    echo "    - /init script"
-    echo "    - LLAMA inference app"
-    ls apps/llama-inference/ | sed 's/^/      /'
+	echo -e "${GREEN}✓${NC} Initramfs verified"
+	echo "  Contains:"
+	echo "    - /init script"
+	echo "    - LLAMA inference app"
+	ls apps/llama-inference/ | sed 's/^/      /'
 else
-    echo -e "${YELLOW}⚠${NC}  Initramfs may be incomplete"
+	echo -e "${YELLOW}⚠${NC}  Initramfs may be incomplete"
 fi
 
 # Cleanup

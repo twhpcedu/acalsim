@@ -40,14 +40,14 @@ echo ""
 
 # Check if disk already exists
 if [ -f "$ROOTFS_DISK" ]; then
-    echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
-    read -p "Overwrite? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted"
-        exit 1
-    fi
-    rm -f "$ROOTFS_DISK"
+	echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
+	read -p "Overwrite? (y/N) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Aborted"
+		exit 1
+	fi
+	rm -f "$ROOTFS_DISK"
 fi
 
 # Create empty disk image
@@ -55,8 +55,8 @@ echo "Creating empty disk image..."
 qemu-img create -f qcow2 "$ROOTFS_DISK" "$ROOTFS_SIZE"
 
 if [ ! -f "$ROOTFS_DISK" ]; then
-    echo -e "${RED}✗${NC} Failed to create disk image"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to create disk image"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Disk image created: $ROOTFS_DISK"
@@ -70,7 +70,7 @@ tar czf /tmp/rootfs-install.tar.gz .
 echo -e "${GREEN}✓${NC} Created /tmp/rootfs-install.tar.gz"
 
 # Create run script for persistent disk
-cat > "$ROOTFS_SOURCE/../run_qemu_persistent.sh" << 'EOFSCRIPT'
+cat >"$ROOTFS_SOURCE/../run_qemu_persistent.sh" <<'EOFSCRIPT'
 #!/bin/bash
 # Boot from persistent root disk
 
@@ -135,13 +135,13 @@ read -p "Press Enter to boot QEMU for manual setup..."
 
 # Boot QEMU with initramfs and empty disk
 exec $QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp 2 \
-    -m 4G \
-    -kernel "$KERNEL" \
-    -initrd "$INITRAMFS" \
-    -append "console=ttyS0 earlycon=sbi rdinit=/init" \
-    -drive file="$ROOTFS_DISK",if=none,id=rootfs,format=qcow2 \
-    -device virtio-blk-device,drive=rootfs \
-    -nographic
+	-M virt \
+	-cpu rv64 \
+	-smp 2 \
+	-m 4G \
+	-kernel "$KERNEL" \
+	-initrd "$INITRAMFS" \
+	-append "console=ttyS0 earlycon=sbi rdinit=/init" \
+	-drive file="$ROOTFS_DISK",if=none,id=rootfs,format=qcow2 \
+	-device virtio-blk-device,drive=rootfs \
+	-nographic

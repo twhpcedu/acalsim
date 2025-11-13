@@ -1,6 +1,4 @@
 /*
- * VirtIO SST Device for QEMU - Header
- *
  * Copyright 2023-2025 Playlab/ACAL
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,8 +38,8 @@
 #ifndef HW_VIRTIO_SST_H
 #define HW_VIRTIO_SST_H
 
-#include "qemu/osdep.h"
 #include "hw/virtio/virtio.h"
+#include "qemu/osdep.h"
 #include "qom/object.h"
 #include "sst-protocol.h"
 
@@ -51,51 +49,51 @@ OBJECT_DECLARE_SIMPLE_TYPE(VirtIOSST, VIRTIO_SST)
 /*
  * VirtQueue Configuration
  */
-#define VIRTIO_SST_QUEUE_SIZE   128    // Queue depth
+#define VIRTIO_SST_QUEUE_SIZE 128  // Queue depth
 
 /*
  * Request Tracking
  */
 typedef struct SSTRequestInfo {
-    uint64_t request_id;
-    VirtQueueElement *elem;
-    struct SSTRequest *req;
-    struct SSTResponse *resp;
-    QLIST_ENTRY(SSTRequestInfo) next;
+	uint64_t            request_id;
+	VirtQueueElement*   elem;
+	struct SSTRequest*  req;
+	struct SSTResponse* resp;
+	QLIST_ENTRY(SSTRequestInfo) next;
 } SSTRequestInfo;
 
 /*
  * VirtIO SST Device State
  */
 struct VirtIOSST {
-    VirtIODevice parent_obj;
+	VirtIODevice parent_obj;
 
-    /* VirtQueues */
-    VirtQueue *req_vq;          // Request queue (driver -> device)
-    VirtQueue *resp_vq;         // Response queue (device -> driver)
-    VirtQueue *event_vq;        // Event queue (device -> driver, async)
+	/* VirtQueues */
+	VirtQueue* req_vq;    // Request queue (driver -> device)
+	VirtQueue* resp_vq;   // Response queue (device -> driver)
+	VirtQueue* event_vq;  // Event queue (device -> driver, async)
 
-    /* Configuration Space */
-    struct SSTConfig config;
+	/* Configuration Space */
+	struct SSTConfig config;
 
-    /* SST Socket Connection */
-    char *socket_path;          // Unix socket path to SST
-    int socket_fd;              // Socket file descriptor
-    bool connected;             // Connection status
+	/* SST Socket Connection */
+	char* socket_path;  // Unix socket path to SST
+	int   socket_fd;    // Socket file descriptor
+	bool  connected;    // Connection status
 
-    /* Device Properties */
-    uint32_t device_id;         // SST device ID
-    uint64_t features;          // Enabled features
+	/* Device Properties */
+	uint32_t device_id;  // SST device ID
+	uint64_t features;   // Enabled features
 
-    /* Request Tracking */
-    uint64_t next_request_id;   // Next request ID
-    QLIST_HEAD(, SSTRequestInfo) pending_requests;  // Pending request list
+	/* Request Tracking */
+	uint64_t next_request_id;                       // Next request ID
+	QLIST_HEAD(, SSTRequestInfo) pending_requests;  // Pending request list
 
-    /* Statistics */
-    uint64_t total_requests;
-    uint64_t total_responses;
-    uint64_t total_events;
-    uint64_t total_errors;
+	/* Statistics */
+	uint64_t total_requests;
+	uint64_t total_responses;
+	uint64_t total_events;
+	uint64_t total_errors;
 };
 
 /*
@@ -103,38 +101,36 @@ struct VirtIOSST {
  */
 
 /* Device Lifecycle */
-void virtio_sst_realize(DeviceState *dev, Error **errp);
-void virtio_sst_unrealize(DeviceState *dev);
-void virtio_sst_reset(VirtIODevice *vdev);
+void virtio_sst_realize(DeviceState* dev, Error** errp);
+void virtio_sst_unrealize(DeviceState* dev);
+void virtio_sst_reset(VirtIODevice* vdev);
 
 /* VirtQueue Handlers */
-void virtio_sst_handle_request(VirtIODevice *vdev, VirtQueue *vq);
-void virtio_sst_handle_response(VirtIODevice *vdev, VirtQueue *vq);
-void virtio_sst_handle_event(VirtIODevice *vdev, VirtQueue *vq);
+void virtio_sst_handle_request(VirtIODevice* vdev, VirtQueue* vq);
+void virtio_sst_handle_response(VirtIODevice* vdev, VirtQueue* vq);
+void virtio_sst_handle_event(VirtIODevice* vdev, VirtQueue* vq);
 
 /* SST Communication */
-bool virtio_sst_connect(VirtIOSST *s, Error **errp);
-void virtio_sst_disconnect(VirtIOSST *s);
-bool virtio_sst_send_request(VirtIOSST *s, struct SSTRequest *req,
-                             struct SSTResponse *resp);
+bool virtio_sst_connect(VirtIOSST* s, Error** errp);
+void virtio_sst_disconnect(VirtIOSST* s);
+bool virtio_sst_send_request(VirtIOSST* s, struct SSTRequest* req, struct SSTResponse* resp);
 
 /* Request Processing */
-void virtio_sst_process_request(VirtIOSST *s, VirtQueue *vq, VirtQueueElement *elem);
-void virtio_sst_complete_request(VirtIOSST *s, SSTRequestInfo *info);
+void virtio_sst_process_request(VirtIOSST* s, VirtQueue* vq, VirtQueueElement* elem);
+void virtio_sst_complete_request(VirtIOSST* s, SSTRequestInfo* info);
 
 /* Event Handling */
-void virtio_sst_inject_event(VirtIOSST *s, struct SSTEvent *event);
+void virtio_sst_inject_event(VirtIOSST* s, struct SSTEvent* event);
 
 /* Feature Negotiation */
-uint64_t virtio_sst_get_features(VirtIODevice *vdev, uint64_t requested_features,
-                                Error **errp);
-void virtio_sst_set_features(VirtIODevice *vdev, uint64_t features);
+uint64_t virtio_sst_get_features(VirtIODevice* vdev, uint64_t requested_features, Error** errp);
+void     virtio_sst_set_features(VirtIODevice* vdev, uint64_t features);
 
 /* Configuration */
-void virtio_sst_get_config(VirtIODevice *vdev, uint8_t *config);
-void virtio_sst_set_config(VirtIODevice *vdev, const uint8_t *config);
+void virtio_sst_get_config(VirtIODevice* vdev, uint8_t* config);
+void virtio_sst_set_config(VirtIODevice* vdev, const uint8_t* config);
 
 /* Status */
-void virtio_sst_set_status(VirtIODevice *vdev, uint8_t status);
+void virtio_sst_set_status(VirtIODevice* vdev, uint8_t status);
 
 #endif /* HW_VIRTIO_SST_H */

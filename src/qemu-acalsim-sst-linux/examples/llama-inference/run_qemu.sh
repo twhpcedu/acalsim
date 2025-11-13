@@ -28,42 +28,42 @@ echo ""
 
 # Check if running inside Docker container
 if [ -f /.dockerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
-    echo -e "${GREEN}✓${NC} Running inside Docker container"
-    IN_DOCKER=true
+	echo -e "${GREEN}✓${NC} Running inside Docker container"
+	IN_DOCKER=true
 else
-    echo -e "${YELLOW}⚠${NC}  Not running in Docker container"
-    echo "This script is designed to run inside the acalsim-workspace container"
-    echo ""
-    echo "To run inside Docker:"
-    echo "  docker exec -it acalsim-workspace bash"
-    echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference"
-    echo "  ./run_qemu.sh"
-    echo ""
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-    IN_DOCKER=false
+	echo -e "${YELLOW}⚠${NC}  Not running in Docker container"
+	echo "This script is designed to run inside the acalsim-workspace container"
+	echo ""
+	echo "To run inside Docker:"
+	echo "  docker exec -it acalsim-workspace bash"
+	echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference"
+	echo "  ./run_qemu.sh"
+	echo ""
+	read -p "Continue anyway? (y/N) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		exit 1
+	fi
+	IN_DOCKER=false
 fi
 
 # Configuration
 SOCKET_PATH="/tmp/qemu-sst-llama.sock"
 
 if [ "$IN_DOCKER" = true ]; then
-    # Docker paths
-    QEMU_BIN=${QEMU_BIN:-/home/user/qemu-build/qemu/build/qemu-system-riscv64}
-    KERNEL=${KERNEL:-/home/user/linux/arch/riscv/boot/Image}
-    # Use the working basic initramfs (has full Linux system)
-    # initramfs-full.cpio.gz is incomplete (only has app files)
-    INITRAMFS=${INITRAMFS:-/home/user/initramfs.cpio.gz}
-    MODEL_DISK=${MODEL_DISK:-/home/user/models.qcow2}
+	# Docker paths
+	QEMU_BIN=${QEMU_BIN:-/home/user/qemu-build/qemu/build/qemu-system-riscv64}
+	KERNEL=${KERNEL:-/home/user/linux/arch/riscv/boot/Image}
+	# Use the working basic initramfs (has full Linux system)
+	# initramfs-full.cpio.gz is incomplete (only has app files)
+	INITRAMFS=${INITRAMFS:-/home/user/initramfs.cpio.gz}
+	MODEL_DISK=${MODEL_DISK:-/home/user/models.qcow2}
 else
-    # Local paths (adjust as needed)
-    QEMU_BIN=${QEMU_BIN:-$HOME/qemu-build/qemu/build/qemu-system-riscv64}
-    KERNEL=${KERNEL:-$HOME/linux/arch/riscv/boot/Image}
-    INITRAMFS=${INITRAMFS:-$HOME/initramfs.cpio.gz}
-    MODEL_DISK=${MODEL_DISK:-$HOME/models.qcow2}
+	# Local paths (adjust as needed)
+	QEMU_BIN=${QEMU_BIN:-$HOME/qemu-build/qemu/build/qemu-system-riscv64}
+	KERNEL=${KERNEL:-$HOME/linux/arch/riscv/boot/Image}
+	INITRAMFS=${INITRAMFS:-$HOME/initramfs.cpio.gz}
+	MODEL_DISK=${MODEL_DISK:-$HOME/models.qcow2}
 fi
 
 MEMORY=${MEMORY:-8G}
@@ -81,90 +81,90 @@ echo ""
 
 # Check if QEMU exists
 if [ ! -f "$QEMU_BIN" ]; then
-    echo -e "${RED}✗${NC} QEMU binary not found: $QEMU_BIN"
-    echo ""
-    echo "Build QEMU with:"
-    echo "  cd /home/user/qemu-build/qemu"
-    echo "  ./configure --target-list=riscv64-softmmu"
-    echo "  make -j\$(nproc)"
-    exit 1
+	echo -e "${RED}✗${NC} QEMU binary not found: $QEMU_BIN"
+	echo ""
+	echo "Build QEMU with:"
+	echo "  cd /home/user/qemu-build/qemu"
+	echo "  ./configure --target-list=riscv64-softmmu"
+	echo "  make -j\$(nproc)"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} QEMU binary found"
 
 # Check if kernel exists
 if [ ! -f "$KERNEL" ]; then
-    echo -e "${RED}✗${NC} Kernel image not found: $KERNEL"
-    echo ""
-    echo "Build kernel with:"
-    echo "  cd /home/user/linux"
-    echo "  make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig"
-    echo "  make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j\$(nproc)"
-    exit 1
+	echo -e "${RED}✗${NC} Kernel image not found: $KERNEL"
+	echo ""
+	echo "Build kernel with:"
+	echo "  cd /home/user/linux"
+	echo "  make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig"
+	echo "  make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- -j\$(nproc)"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Kernel image found"
 
 # Check if initramfs exists
 if [ ! -f "$INITRAMFS" ]; then
-    echo -e "${YELLOW}⚠${NC}  Initramfs not found: $INITRAMFS"
-    echo ""
-    echo "Using basic initramfs. For full PyTorch support, build with:"
-    echo "  See PYTORCH_LLAMA_SETUP.md for instructions"
-    echo ""
+	echo -e "${YELLOW}⚠${NC}  Initramfs not found: $INITRAMFS"
+	echo ""
+	echo "Using basic initramfs. For full PyTorch support, build with:"
+	echo "  See PYTORCH_LLAMA_SETUP.md for instructions"
+	echo ""
 
-    # Try to find basic initramfs
-    INITRAMFS="/home/user/initramfs.cpio.gz"
-    if [ ! -f "$INITRAMFS" ]; then
-        echo -e "${RED}✗${NC} No initramfs found"
-        exit 1
-    fi
-    echo -e "${YELLOW}⚠${NC}  Using basic initramfs (PyTorch may not be available)"
+	# Try to find basic initramfs
+	INITRAMFS="/home/user/initramfs.cpio.gz"
+	if [ ! -f "$INITRAMFS" ]; then
+		echo -e "${RED}✗${NC} No initramfs found"
+		exit 1
+	fi
+	echo -e "${YELLOW}⚠${NC}  Using basic initramfs (PyTorch may not be available)"
 fi
 
 echo -e "${GREEN}✓${NC} Initramfs found"
 
 # Check if model disk exists
 if [ ! -f "$MODEL_DISK" ]; then
-    echo -e "${YELLOW}⚠${NC}  Model disk not found: $MODEL_DISK"
-    echo ""
-    echo "The LLAMA 2 7B model disk is not present."
-    echo "You can:"
-    echo "  1. Create a virtual disk:"
-    echo "     qemu-img create -f qcow2 $MODEL_DISK 20G"
-    echo ""
-    echo "  2. Download and install LLAMA 2 model:"
-    echo "     See PYTORCH_LLAMA_SETUP.md Step 5"
-    echo ""
-    echo "QEMU will start, but the model will not be available."
-    echo ""
-    MODEL_DISK_ARG=""
+	echo -e "${YELLOW}⚠${NC}  Model disk not found: $MODEL_DISK"
+	echo ""
+	echo "The LLAMA 2 7B model disk is not present."
+	echo "You can:"
+	echo "  1. Create a virtual disk:"
+	echo "     qemu-img create -f qcow2 $MODEL_DISK 20G"
+	echo ""
+	echo "  2. Download and install LLAMA 2 model:"
+	echo "     See PYTORCH_LLAMA_SETUP.md Step 5"
+	echo ""
+	echo "QEMU will start, but the model will not be available."
+	echo ""
+	MODEL_DISK_ARG=""
 else
-    echo -e "${GREEN}✓${NC} Model disk found: $MODEL_DISK"
-    MODEL_DISK_SIZE=$(du -h "$MODEL_DISK" | cut -f1)
-    echo "  Size: $MODEL_DISK_SIZE"
-    MODEL_DISK_ARG="-drive file=$MODEL_DISK,if=none,id=vda,format=qcow2 -device virtio-blk-device,drive=vda"
+	echo -e "${GREEN}✓${NC} Model disk found: $MODEL_DISK"
+	MODEL_DISK_SIZE=$(du -h "$MODEL_DISK" | cut -f1)
+	echo "  Size: $MODEL_DISK_SIZE"
+	MODEL_DISK_ARG="-drive file=$MODEL_DISK,if=none,id=vda,format=qcow2 -device virtio-blk-device,drive=vda"
 fi
 
 # Check if SST socket exists (SST should be running)
 if [ ! -S "$SOCKET_PATH" ]; then
-    echo ""
-    echo -e "${YELLOW}⚠${NC}  SST socket not found: $SOCKET_PATH"
-    echo ""
-    echo "Make sure SST simulation is running first!"
-    echo ""
-    echo "In another terminal:"
-    echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference"
-    echo "  ./run_sst.sh"
-    echo ""
-    echo "Wait for 'Waiting for QEMU to connect...' message, then start QEMU."
-    echo ""
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-    echo -e "${YELLOW}⚠${NC}  Continuing without SST connection (device will not work)"
+	echo ""
+	echo -e "${YELLOW}⚠${NC}  SST socket not found: $SOCKET_PATH"
+	echo ""
+	echo "Make sure SST simulation is running first!"
+	echo ""
+	echo "In another terminal:"
+	echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference"
+	echo "  ./run_sst.sh"
+	echo ""
+	echo "Wait for 'Waiting for QEMU to connect...' message, then start QEMU."
+	echo ""
+	read -p "Continue anyway? (y/N) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		exit 1
+	fi
+	echo -e "${YELLOW}⚠${NC}  Continuing without SST connection (device will not work)"
 fi
 
 echo ""
@@ -195,40 +195,40 @@ CMDLINE="console=ttyS0 earlycon=sbi rdinit=/init"
 
 # Show command (for debugging)
 if [ "${DEBUG:-0}" = "1" ]; then
-    echo "QEMU Command:"
-    echo "$QEMU_BIN -M virt -cpu rv64 -smp $CPUS -m $MEMORY \\"
-    echo "  -kernel $KERNEL \\"
-    echo "  -initrd $INITRAMFS \\"
-    echo "  -append \"$CMDLINE\" \\"
-    echo "  -nographic \\"
-    echo "  -device virtio-sst-device,socket=$SOCKET_PATH \\"
-    echo "  $MODEL_DISK_ARG"
-    echo ""
+	echo "QEMU Command:"
+	echo "$QEMU_BIN -M virt -cpu rv64 -smp $CPUS -m $MEMORY \\"
+	echo "  -kernel $KERNEL \\"
+	echo "  -initrd $INITRAMFS \\"
+	echo "  -append \"$CMDLINE\" \\"
+	echo "  -nographic \\"
+	echo "  -device virtio-sst-device,socket=$SOCKET_PATH \\"
+	echo "  $MODEL_DISK_ARG"
+	echo ""
 fi
 
 # Run QEMU
 # Note: Use exec with proper argument array to avoid quoting issues
 if [ -n "$MODEL_DISK_ARG" ]; then
-    exec $QEMU_BIN \
-        -M virt \
-        -cpu rv64 \
-        -smp $CPUS \
-        -m $MEMORY \
-        -kernel "$KERNEL" \
-        -initrd "$INITRAMFS" \
-        -append "$CMDLINE" \
-        -nographic \
-        -device virtio-sst-device,socket=$SOCKET_PATH \
-        $MODEL_DISK_ARG
+	exec $QEMU_BIN \
+		-M virt \
+		-cpu rv64 \
+		-smp $CPUS \
+		-m $MEMORY \
+		-kernel "$KERNEL" \
+		-initrd "$INITRAMFS" \
+		-append "$CMDLINE" \
+		-nographic \
+		-device virtio-sst-device,socket=$SOCKET_PATH \
+		$MODEL_DISK_ARG
 else
-    exec $QEMU_BIN \
-        -M virt \
-        -cpu rv64 \
-        -smp $CPUS \
-        -m $MEMORY \
-        -kernel "$KERNEL" \
-        -initrd "$INITRAMFS" \
-        -append "$CMDLINE" \
-        -nographic \
-        -device virtio-sst-device,socket=$SOCKET_PATH
+	exec $QEMU_BIN \
+		-M virt \
+		-cpu rv64 \
+		-smp $CPUS \
+		-m $MEMORY \
+		-kernel "$KERNEL" \
+		-initrd "$INITRAMFS" \
+		-append "$CMDLINE" \
+		-nographic \
+		-device virtio-sst-device,socket=$SOCKET_PATH
 fi

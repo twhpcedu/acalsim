@@ -24,10 +24,10 @@ NC='\033[0m' # No Color
 
 # Check arguments
 if [ $# -ne 1 ]; then
-    echo -e "${RED}Error: QEMU source directory not specified${NC}"
-    echo "Usage: $0 <qemu-source-dir>"
-    echo "Example: $0 /home/user/qemu-build/qemu"
-    exit 1
+	echo -e "${RED}Error: QEMU source directory not specified${NC}"
+	echo "Usage: $0 <qemu-source-dir>"
+	echo "Example: $0 /home/user/qemu-build/qemu"
+	exit 1
 fi
 
 QEMU_SRC="$1"
@@ -36,13 +36,13 @@ VIRTIO_DEVICE_DIR="$(dirname "$SCRIPT_DIR")/virtio-device"
 
 # Verify directories exist
 if [ ! -d "$QEMU_SRC" ]; then
-    echo -e "${RED}Error: QEMU source directory not found: $QEMU_SRC${NC}"
-    exit 1
+	echo -e "${RED}Error: QEMU source directory not found: $QEMU_SRC${NC}"
+	exit 1
 fi
 
 if [ ! -d "$VIRTIO_DEVICE_DIR" ]; then
-    echo -e "${RED}Error: VirtIO device directory not found: $VIRTIO_DEVICE_DIR${NC}"
-    exit 1
+	echo -e "${RED}Error: VirtIO device directory not found: $VIRTIO_DEVICE_DIR${NC}"
+	exit 1
 fi
 
 echo "============================================"
@@ -70,16 +70,16 @@ MESON_BUILD="$QEMU_SRC/hw/virtio/meson.build"
 
 # Check if already added
 if grep -q "CONFIG_VIRTIO_SST" "$MESON_BUILD"; then
-    echo -e "${YELLOW}⚠ VirtIO SST already in meson.build, removing old entry...${NC}"
-    sed -i '/CONFIG_VIRTIO_SST/d' "$MESON_BUILD"
+	echo -e "${YELLOW}⚠ VirtIO SST already in meson.build, removing old entry...${NC}"
+	sed -i '/CONFIG_VIRTIO_SST/d' "$MESON_BUILD"
 fi
 
 # Find the line with specific_ss.add_all and insert before it
 LINE_NUM=$(grep -n "^specific_ss.add_all(when: 'CONFIG_VIRTIO', if_true: virtio_ss)" "$MESON_BUILD" | cut -d: -f1)
 
 if [ -z "$LINE_NUM" ]; then
-    echo -e "${RED}Error: Could not find specific_ss.add_all line in meson.build${NC}"
-    exit 1
+	echo -e "${RED}Error: Could not find specific_ss.add_all line in meson.build${NC}"
+	exit 1
 fi
 
 # Insert the virtio-sst line before specific_ss.add_all
@@ -95,17 +95,17 @@ KCONFIG="$QEMU_SRC/hw/virtio/Kconfig"
 
 # Check if already added
 if grep -q "CONFIG_VIRTIO_SST" "$KCONFIG"; then
-    echo -e "${YELLOW}⚠ VirtIO SST already in Kconfig, skipping...${NC}"
+	echo -e "${YELLOW}⚠ VirtIO SST already in Kconfig, skipping...${NC}"
 else
-    # Add Kconfig entry at the end
-    cat >> "$KCONFIG" <<'EOF'
+	# Add Kconfig entry at the end
+	cat >>"$KCONFIG" <<'EOF'
 
 config VIRTIO_SST
     bool
     default y
     depends on VIRTIO
 EOF
-    echo -e "${GREEN}✓ Kconfig updated${NC}"
+	echo -e "${GREEN}✓ Kconfig updated${NC}"
 fi
 echo ""
 
@@ -116,68 +116,68 @@ ERRORS=0
 
 # Check header files
 if [ ! -f "$QEMU_SRC/include/hw/virtio/sst-protocol.h" ]; then
-    echo -e "${RED}✗ Missing: include/hw/virtio/sst-protocol.h${NC}"
-    ERRORS=$((ERRORS + 1))
+	echo -e "${RED}✗ Missing: include/hw/virtio/sst-protocol.h${NC}"
+	ERRORS=$((ERRORS + 1))
 else
-    echo -e "${GREEN}✓ include/hw/virtio/sst-protocol.h${NC}"
+	echo -e "${GREEN}✓ include/hw/virtio/sst-protocol.h${NC}"
 fi
 
 if [ ! -f "$QEMU_SRC/include/hw/virtio/virtio-sst.h" ]; then
-    echo -e "${RED}✗ Missing: include/hw/virtio/virtio-sst.h${NC}"
-    ERRORS=$((ERRORS + 1))
+	echo -e "${RED}✗ Missing: include/hw/virtio/virtio-sst.h${NC}"
+	ERRORS=$((ERRORS + 1))
 else
-    echo -e "${GREEN}✓ include/hw/virtio/virtio-sst.h${NC}"
+	echo -e "${GREEN}✓ include/hw/virtio/virtio-sst.h${NC}"
 fi
 
 # Check source file
 if [ ! -f "$QEMU_SRC/hw/virtio/virtio-sst.c" ]; then
-    echo -e "${RED}✗ Missing: hw/virtio/virtio-sst.c${NC}"
-    ERRORS=$((ERRORS + 1))
+	echo -e "${RED}✗ Missing: hw/virtio/virtio-sst.c${NC}"
+	ERRORS=$((ERRORS + 1))
 else
-    echo -e "${GREEN}✓ hw/virtio/virtio-sst.c${NC}"
+	echo -e "${GREEN}✓ hw/virtio/virtio-sst.c${NC}"
 fi
 
 # Check meson.build
 if ! grep -q "CONFIG_VIRTIO_SST.*virtio-sst.c" "$MESON_BUILD"; then
-    echo -e "${RED}✗ VirtIO SST not properly added to meson.build${NC}"
-    ERRORS=$((ERRORS + 1))
+	echo -e "${RED}✗ VirtIO SST not properly added to meson.build${NC}"
+	ERRORS=$((ERRORS + 1))
 else
-    echo -e "${GREEN}✓ hw/virtio/meson.build configured${NC}"
+	echo -e "${GREEN}✓ hw/virtio/meson.build configured${NC}"
 fi
 
 # Check Kconfig - verify file was modified
 KCONFIG_SIZE=$(stat -c%s "$KCONFIG" 2>/dev/null || stat -f%z "$KCONFIG" 2>/dev/null || echo "0")
 if [ "$KCONFIG_SIZE" -gt 1000 ]; then
-    # File exists and has reasonable size, assume configuration was added
-    echo -e "${GREEN}✓ hw/virtio/Kconfig configured${NC}"
+	# File exists and has reasonable size, assume configuration was added
+	echo -e "${GREEN}✓ hw/virtio/Kconfig configured${NC}"
 else
-    echo -e "${RED}✗ VirtIO SST not in Kconfig${NC}"
-    ERRORS=$((ERRORS + 1))
+	echo -e "${RED}✗ VirtIO SST not in Kconfig${NC}"
+	ERRORS=$((ERRORS + 1))
 fi
 
 echo ""
 
 if [ $ERRORS -eq 0 ]; then
-    echo "============================================"
-    echo -e "${GREEN}✓ VirtIO SST device successfully integrated!${NC}"
-    echo "============================================"
-    echo ""
-    echo "Next steps:"
-    echo "  1. Configure QEMU:"
-    echo "     cd $QEMU_SRC"
-    echo "     mkdir -p build && cd build"
-    echo "     ../configure --target-list=riscv64-softmmu --enable-virtfs"
-    echo ""
-    echo "  2. Build QEMU:"
-    echo "     make -j\$(nproc)"
-    echo ""
-    echo "  3. Verify build:"
-    echo "     ./qemu-system-riscv64 --version"
-    echo ""
-    exit 0
+	echo "============================================"
+	echo -e "${GREEN}✓ VirtIO SST device successfully integrated!${NC}"
+	echo "============================================"
+	echo ""
+	echo "Next steps:"
+	echo "  1. Configure QEMU:"
+	echo "     cd $QEMU_SRC"
+	echo "     mkdir -p build && cd build"
+	echo "     ../configure --target-list=riscv64-softmmu --enable-virtfs"
+	echo ""
+	echo "  2. Build QEMU:"
+	echo "     make -j\$(nproc)"
+	echo ""
+	echo "  3. Verify build:"
+	echo "     ./qemu-system-riscv64 --version"
+	echo ""
+	exit 0
 else
-    echo "============================================"
-    echo -e "${RED}✗ Setup completed with $ERRORS error(s)${NC}"
-    echo "============================================"
-    exit 1
+	echo "============================================"
+	echo -e "${RED}✗ Setup completed with $ERRORS error(s)${NC}"
+	echo "============================================"
+	exit 1
 fi

@@ -18,9 +18,16 @@
 
 #include <atomic>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
+// Check if syncstream is available (C++20 feature, not fully supported on all platforms)
+#if __has_include(<syncstream>) && (!defined(__APPLE__) || __clang_major__ >= 18)
 #include <syncstream>
+#define HAS_SYNCSTREAM 1
+#else
+#define HAS_SYNCSTREAM 0
+#endif
 
 #include "utils/HashableType.hh"
 
@@ -203,7 +210,11 @@ public:
 	~LogOStream() noexcept(false) {
 		if (this->level != LoggingSeverity::L_ERROR) {
 			std::string msg = this->ss.str() + this->postfix + "\n";
-			std::osyncstream(std::cout) << msg;
+#if HAS_SYNCSTREAM
+			std::osyncstream(std::cout) << msg << std::flush;
+#else
+			std::cout << msg << std::flush;
+#endif
 		} else {
 			if (!LogOStream::hasCalledTerminate) throw std::runtime_error(this->ss.str() + this->postfix);
 		}

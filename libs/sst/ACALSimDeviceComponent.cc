@@ -21,9 +21,14 @@
 using namespace ACALSim::QEMUIntegration;
 
 ACALSimDeviceComponent::ACALSimDeviceComponent(SST::ComponentId_t id, SST::Params& params)
-    : SST::Component(id), current_cycle_(0), echo_pending_(false), echo_complete_cycle_(0), pending_req_id_(0),
-      total_loads_(0), total_stores_(0), total_echos_(0) {
-
+    : SST::Component(id),
+      current_cycle_(0),
+      echo_pending_(false),
+      echo_complete_cycle_(0),
+      pending_req_id_(0),
+      total_loads_(0),
+      total_stores_(0),
+      total_echos_(0) {
 	// Initialize output
 	int verbose = params.find<int>("verbose", 1);
 	out_.init("ACALSimDevice[@p:@l]: ", verbose, 0, SST::Output::STDOUT);
@@ -46,11 +51,12 @@ ACALSimDeviceComponent::ACALSimDeviceComponent(SST::ComponentId_t id, SST::Param
 	resetDevice();
 
 	// Configure clock
-	tc_ = registerClock(clock_freq, new SST::Clock::Handler<ACALSimDeviceComponent>(this, &ACALSimDeviceComponent::clockTick));
+	tc_ = registerClock(clock_freq,
+	                    new SST::Clock::Handler<ACALSimDeviceComponent>(this, &ACALSimDeviceComponent::clockTick));
 
 	// Configure link to CPU (QEMU)
-	cpu_link_ = configureLink("cpu_port",
-	                          new SST::Event::Handler<ACALSimDeviceComponent>(this, &ACALSimDeviceComponent::handleMemoryTransaction));
+	cpu_link_ = configureLink("cpu_port", new SST::Event::Handler<ACALSimDeviceComponent>(
+	                                          this, &ACALSimDeviceComponent::handleMemoryTransaction));
 
 	if (!cpu_link_) { out_.fatal(CALL_INFO, -1, "Error: Failed to configure cpu_port link\n"); }
 
@@ -65,9 +71,7 @@ ACALSimDeviceComponent::~ACALSimDeviceComponent() {
 	// Cleanup if needed
 }
 
-void ACALSimDeviceComponent::setup() {
-	out_.verbose(CALL_INFO, 1, 0, "Setup phase\n");
-}
+void ACALSimDeviceComponent::setup() { out_.verbose(CALL_INFO, 1, 0, "Setup phase\n"); }
 
 void ACALSimDeviceComponent::finish() {
 	out_.verbose(CALL_INFO, 1, 0, "Finish phase\n");
@@ -118,8 +122,8 @@ void ACALSimDeviceComponent::handleMemoryTransaction(SST::Event* ev) {
 		out_.verbose(CALL_INFO, 2, 0, "LOAD: addr=0x%lx offset=0x%lx size=%u req_id=%lu\n", addr, offset, size, req_id);
 		processLoad(offset, size, req_id);
 	} else {  // STORE
-		out_.verbose(CALL_INFO, 2, 0, "STORE: addr=0x%lx offset=0x%lx data=0x%x size=%u req_id=%lu\n", addr, offset, data, size,
-		             req_id);
+		out_.verbose(CALL_INFO, 2, 0, "STORE: addr=0x%lx offset=0x%lx data=0x%x size=%u req_id=%lu\n", addr, offset,
+		             data, size, req_id);
 		processStore(offset, data, size, req_id);
 	}
 
@@ -172,65 +176,54 @@ void ACALSimDeviceComponent::processStore(uint64_t addr, uint32_t data, uint32_t
 
 uint32_t ACALSimDeviceComponent::readRegister(uint64_t offset) {
 	switch (offset) {
-	case REG_DATA_IN:
-		out_.verbose(CALL_INFO, 3, 0, "Read DATA_IN (write-only, returning 0)\n");
-		return 0;  // Write-only register
+		case REG_DATA_IN:
+			out_.verbose(CALL_INFO, 3, 0, "Read DATA_IN (write-only, returning 0)\n");
+			return 0;  // Write-only register
 
-	case REG_DATA_OUT:
-		out_.verbose(CALL_INFO, 3, 0, "Read DATA_OUT = 0x%x\n", data_out_);
-		return data_out_;
+		case REG_DATA_OUT: out_.verbose(CALL_INFO, 3, 0, "Read DATA_OUT = 0x%x\n", data_out_); return data_out_;
 
-	case REG_STATUS:
-		out_.verbose(CALL_INFO, 3, 0, "Read STATUS = 0x%x\n", status_);
-		return status_;
+		case REG_STATUS: out_.verbose(CALL_INFO, 3, 0, "Read STATUS = 0x%x\n", status_); return status_;
 
-	case REG_CONTROL:
-		out_.verbose(CALL_INFO, 3, 0, "Read CONTROL = 0x%x\n", control_);
-		return control_;
+		case REG_CONTROL: out_.verbose(CALL_INFO, 3, 0, "Read CONTROL = 0x%x\n", control_); return control_;
 
-	default:
-		out_.verbose(CALL_INFO, 2, 0, "Read from undefined register offset 0x%lx\n", offset);
-		return 0;
+		default: out_.verbose(CALL_INFO, 2, 0, "Read from undefined register offset 0x%lx\n", offset); return 0;
 	}
 }
 
 void ACALSimDeviceComponent::writeRegister(uint64_t offset, uint32_t value) {
 	switch (offset) {
-	case REG_DATA_IN:
-		out_.verbose(CALL_INFO, 3, 0, "Write DATA_IN = 0x%x\n", value);
-		data_in_ = value;
+		case REG_DATA_IN:
+			out_.verbose(CALL_INFO, 3, 0, "Write DATA_IN = 0x%x\n", value);
+			data_in_ = value;
 
-		// If not already busy, start echo operation
-		if (!echo_pending_) {
-			status_ |= STATUS_BUSY;
-			echo_pending_        = true;
-			echo_complete_cycle_ = current_cycle_ + echo_latency_;
-			out_.verbose(CALL_INFO, 2, 0, "Starting echo operation (will complete at cycle %lu)\n", echo_complete_cycle_);
-		}
-		break;
+			// If not already busy, start echo operation
+			if (!echo_pending_) {
+				status_ |= STATUS_BUSY;
+				echo_pending_        = true;
+				echo_complete_cycle_ = current_cycle_ + echo_latency_;
+				out_.verbose(CALL_INFO, 2, 0, "Starting echo operation (will complete at cycle %lu)\n",
+				             echo_complete_cycle_);
+			}
+			break;
 
-	case REG_DATA_OUT:
-		out_.verbose(CALL_INFO, 2, 0, "Attempted write to DATA_OUT (read-only, ignored)\n");
-		break;
+		case REG_DATA_OUT: out_.verbose(CALL_INFO, 2, 0, "Attempted write to DATA_OUT (read-only, ignored)\n"); break;
 
-	case REG_STATUS:
-		out_.verbose(CALL_INFO, 2, 0, "Attempted write to STATUS (read-only, ignored)\n");
-		break;
+		case REG_STATUS: out_.verbose(CALL_INFO, 2, 0, "Attempted write to STATUS (read-only, ignored)\n"); break;
 
-	case REG_CONTROL:
-		out_.verbose(CALL_INFO, 3, 0, "Write CONTROL = 0x%x\n", value);
-		control_ = value;
+		case REG_CONTROL:
+			out_.verbose(CALL_INFO, 3, 0, "Write CONTROL = 0x%x\n", value);
+			control_ = value;
 
-		// Check for reset command
-		if (control_ & CONTROL_RESET) {
-			out_.verbose(CALL_INFO, 1, 0, "Device reset triggered\n");
-			resetDevice();
-		}
-		break;
+			// Check for reset command
+			if (control_ & CONTROL_RESET) {
+				out_.verbose(CALL_INFO, 1, 0, "Device reset triggered\n");
+				resetDevice();
+			}
+			break;
 
-	default:
-		out_.verbose(CALL_INFO, 2, 0, "Write to undefined register offset 0x%lx value 0x%x\n", offset, value);
-		break;
+		default:
+			out_.verbose(CALL_INFO, 2, 0, "Write to undefined register offset 0x%lx value 0x%x\n", offset, value);
+			break;
 	}
 }
 

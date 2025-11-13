@@ -37,22 +37,22 @@ echo ""
 
 # Check if rootfs source exists
 if [ ! -d "$ROOTFS_SOURCE" ]; then
-    echo -e "${RED}✗${NC} Source rootfs not found: $ROOTFS_SOURCE"
-    exit 1
+	echo -e "${RED}✗${NC} Source rootfs not found: $ROOTFS_SOURCE"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Source rootfs found"
 
 # Check if disk already exists
 if [ -f "$ROOTFS_DISK" ]; then
-    echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
-    read -p "Overwrite? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted"
-        exit 1
-    fi
-    rm -f "$ROOTFS_DISK"
+	echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
+	read -p "Overwrite? (y/N) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Aborted"
+		exit 1
+	fi
+	rm -f "$ROOTFS_DISK"
 fi
 
 # Create disk image
@@ -61,8 +61,8 @@ echo "Creating disk image..."
 qemu-img create -f qcow2 "$ROOTFS_DISK" "$ROOTFS_SIZE"
 
 if [ ! -f "$ROOTFS_DISK" ]; then
-    echo -e "${RED}✗${NC} Failed to create disk image"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to create disk image"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Disk image created: $ROOTFS_DISK"
@@ -78,23 +78,23 @@ sudo modprobe nbd max_part=8 2>/dev/null || true
 
 # Check if qemu-nbd is available AND NBD is actually usable
 NBD_AVAILABLE=false
-if command -v qemu-nbd &> /dev/null; then
-    # Check if NBD device exists
-    if [ -e /dev/nbd0 ]; then
-        NBD_AVAILABLE=true
-    fi
+if command -v qemu-nbd &>/dev/null; then
+	# Check if NBD device exists
+	if [ -e /dev/nbd0 ]; then
+		NBD_AVAILABLE=true
+	fi
 fi
 
 if [ "$NBD_AVAILABLE" = "false" ]; then
-    echo -e "${YELLOW}⚠${NC}  NBD (Network Block Device) not available in this environment"
-    echo ""
-    echo "This is common in Docker containers without privileged mode."
-    echo "Using alternative setup method that boots QEMU to populate the disk..."
-    echo ""
+	echo -e "${YELLOW}⚠${NC}  NBD (Network Block Device) not available in this environment"
+	echo ""
+	echo "This is common in Docker containers without privileged mode."
+	echo "Using alternative setup method that boots QEMU to populate the disk..."
+	echo ""
 
-    # Create a setup script that boots QEMU and populates the disk
-    SETUP_SCRIPT="/tmp/setup_rootfs_helper.sh"
-    cat > "$SETUP_SCRIPT" << 'EOFHELPER'
+	# Create a setup script that boots QEMU and populates the disk
+	SETUP_SCRIPT="/tmp/setup_rootfs_helper.sh"
+	cat >"$SETUP_SCRIPT" <<'EOFHELPER'
 #!/bin/bash
 # Helper script to populate persistent rootfs via QEMU
 set -e
@@ -186,58 +186,58 @@ $QEMU_BIN \
 rm -rf "$TEMP_DIR" /tmp/rootfs-install.tar.gz "$TEMP_INITRAMFS" /tmp/setup_commands.txt
 EOFHELPER
 
-    chmod +x "$SETUP_SCRIPT"
+	chmod +x "$SETUP_SCRIPT"
 
-    echo "Populating disk via QEMU..."
-    bash "$SETUP_SCRIPT"
+	echo "Populating disk via QEMU..."
+	bash "$SETUP_SCRIPT"
 
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓${NC} Disk populated successfully"
-        rm -f "$SETUP_SCRIPT"
-    else
-        echo -e "${RED}✗${NC} Failed to populate disk"
-        echo "Setup script saved at: $SETUP_SCRIPT"
-        exit 1
-    fi
+	if [ $? -eq 0 ]; then
+		echo -e "${GREEN}✓${NC} Disk populated successfully"
+		rm -f "$SETUP_SCRIPT"
+	else
+		echo -e "${RED}✗${NC} Failed to populate disk"
+		echo "Setup script saved at: $SETUP_SCRIPT"
+		exit 1
+	fi
 else
-    echo "Using NBD to format and populate disk..."
+	echo "Using NBD to format and populate disk..."
 
-    # Connect disk via NBD
-    sudo qemu-nbd --connect=/dev/nbd0 "$ROOTFS_DISK"
+	# Connect disk via NBD
+	sudo qemu-nbd --connect=/dev/nbd0 "$ROOTFS_DISK"
 
-    # Format
-    echo "Formatting as ext4..."
-    sudo mkfs.ext4 /dev/nbd0
+	# Format
+	echo "Formatting as ext4..."
+	sudo mkfs.ext4 /dev/nbd0
 
-    # Mount
-    mkdir -p "$TEMP_MOUNT"
-    sudo mount /dev/nbd0 "$TEMP_MOUNT"
+	# Mount
+	mkdir -p "$TEMP_MOUNT"
+	sudo mount /dev/nbd0 "$TEMP_MOUNT"
 
-    # Copy rootfs
-    echo ""
-    echo "Copying rootfs contents..."
-    sudo cp -a "$ROOTFS_SOURCE"/* "$TEMP_MOUNT/"
+	# Copy rootfs
+	echo ""
+	echo "Copying rootfs contents..."
+	sudo cp -a "$ROOTFS_SOURCE"/* "$TEMP_MOUNT/"
 
-    # Add LLAMA app
-    echo "Installing LLAMA app..."
-    sudo mkdir -p "$TEMP_MOUNT/apps/llama-inference"
-    sudo cp llama_inference.py "$TEMP_MOUNT/apps/llama-inference/"
-    sudo cp llama_sst_backend.py "$TEMP_MOUNT/apps/llama-inference/"
-    sudo cp test_prompts.txt "$TEMP_MOUNT/apps/llama-inference/"
-    sudo cp README.md "$TEMP_MOUNT/apps/llama-inference/"
-    sudo chmod +x "$TEMP_MOUNT/apps/llama-inference/llama_inference.py"
+	# Add LLAMA app
+	echo "Installing LLAMA app..."
+	sudo mkdir -p "$TEMP_MOUNT/apps/llama-inference"
+	sudo cp llama_inference.py "$TEMP_MOUNT/apps/llama-inference/"
+	sudo cp llama_sst_backend.py "$TEMP_MOUNT/apps/llama-inference/"
+	sudo cp test_prompts.txt "$TEMP_MOUNT/apps/llama-inference/"
+	sudo cp README.md "$TEMP_MOUNT/apps/llama-inference/"
+	sudo chmod +x "$TEMP_MOUNT/apps/llama-inference/llama_inference.py"
 
-    echo -e "${GREEN}✓${NC} LLAMA app installed"
+	echo -e "${GREEN}✓${NC} LLAMA app installed"
 
-    # Unmount
-    sudo umount "$TEMP_MOUNT"
-    sudo qemu-nbd --disconnect /dev/nbd0
+	# Unmount
+	sudo umount "$TEMP_MOUNT"
+	sudo qemu-nbd --disconnect /dev/nbd0
 fi
 
 echo -e "${GREEN}✓${NC} Disk populated and unmounted"
 
 # Create helper script to boot from this disk
-cat > run_qemu_persistent.sh << 'EOFSCRIPT'
+cat >run_qemu_persistent.sh <<'EOFSCRIPT'
 #!/bin/bash
 # Boot from persistent root disk
 

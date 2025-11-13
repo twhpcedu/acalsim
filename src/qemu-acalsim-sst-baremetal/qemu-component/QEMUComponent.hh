@@ -18,20 +18,18 @@
 #define __QEMU_COMPONENT_HH__
 
 #include <sst/core/component.h>
-#include <sst/core/link.h>
 #include <sst/core/event.h>
+#include <sst/core/link.h>
 #include <sst/core/output.h>
-#include <queue>
+
 #include <map>
+#include <queue>
 
 namespace ACALSim {
 namespace QEMUIntegration {
 
 // Forward declarations - these match the device component events
-enum class TransactionType : uint8_t {
-	LOAD  = 0,
-	STORE = 1
-};
+enum class TransactionType : uint8_t { LOAD = 0, STORE = 1 };
 
 /**
  * @brief Memory transaction event sent from QEMU to Device
@@ -51,11 +49,11 @@ public:
 
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& type_;
-		ser& address_;
-		ser& data_;
-		ser& size_;
-		ser& req_id_;
+		ser & type_;
+		ser & address_;
+		ser & data_;
+		ser & size_;
+		ser & req_id_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::MemoryTransactionEvent);
@@ -84,9 +82,9 @@ public:
 
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& req_id_;
-		ser& data_;
-		ser& success_;
+		ser & req_id_;
+		ser & data_;
+		ser & success_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::MemoryResponseEvent);
@@ -138,11 +136,11 @@ public:
 	 * @brief Parameter documentation
 	 */
 	SST_ELI_DOCUMENT_PARAMS({{"clock", "Clock frequency", "1GHz"},
-	                        {"device_base", "Device base address", "0x10000000"},
-	                        {"device_size", "Device memory size", "4096"},
-	                        {"verbose", "Verbosity level", "1"},
-	                        {"test_pattern", "Test data pattern to write", "0xDEADBEEF"},
-	                        {"num_iterations", "Number of test iterations", "5"}})
+	                         {"device_base", "Device base address", "0x10000000"},
+	                         {"device_size", "Device memory size", "4096"},
+	                         {"verbose", "Verbosity level", "1"},
+	                         {"test_pattern", "Test data pattern to write", "0xDEADBEEF"},
+	                         {"num_iterations", "Number of test iterations", "5"}})
 
 	/**
 	 * @brief Port documentation
@@ -183,13 +181,13 @@ private:
 	 * @brief Test program states
 	 */
 	enum class TestState {
-		IDLE,           ///< Initial state
-		WRITE_DATA,     ///< Writing to device DATA_IN
-		WAIT_BUSY,      ///< Waiting for device to process
-		READ_STATUS,    ///< Reading device STATUS
-		READ_DATA,      ///< Reading from device DATA_OUT
-		VERIFY,         ///< Verifying result
-		DONE            ///< Test complete
+		IDLE,         ///< Initial state
+		WRITE_DATA,   ///< Writing to device DATA_IN
+		WAIT_BUSY,    ///< Waiting for device to process
+		READ_STATUS,  ///< Reading device STATUS
+		READ_DATA,    ///< Reading from device DATA_OUT
+		VERIFY,       ///< Verifying result
+		DONE          ///< Test complete
 	};
 
 	/**
@@ -227,36 +225,36 @@ private:
 	bool isDeviceAddress(uint64_t addr) const;
 
 	// SST infrastructure
-	SST::Output         out_;          ///< Output handler
-	SST::Link*          device_link_;  ///< Link to device
-	SST::TimeConverter* tc_;           ///< Time converter
+	SST::Output         out_;            ///< Output handler
+	SST::Link*          device_link_;    ///< Link to device
+	SST::TimeConverter* tc_;             ///< Time converter
 	SST::Cycle_t        current_cycle_;  ///< Current cycle
 
 	// Device configuration
-	uint64_t device_base_;  ///< Device base address
-	uint64_t device_size_;  ///< Device size
-	uint32_t test_pattern_;  ///< Test data pattern
+	uint64_t device_base_;     ///< Device base address
+	uint64_t device_size_;     ///< Device size
+	uint32_t test_pattern_;    ///< Test data pattern
 	uint32_t num_iterations_;  ///< Number of test iterations
 
 	// Transaction management
-	uint64_t                                 next_req_id_;  ///< Next request ID
-	std::map<uint64_t, PendingTransaction>   pending_transactions_;  ///< Pending requests
-	std::queue<MemoryResponseEvent*>         response_queue_;  ///< Received responses
+	uint64_t                               next_req_id_;           ///< Next request ID
+	std::map<uint64_t, PendingTransaction> pending_transactions_;  ///< Pending requests
+	std::queue<MemoryResponseEvent*>       response_queue_;        ///< Received responses
 
 	// Test program state
-	TestState test_state_;         ///< Current test state
-	uint32_t  iteration_;          ///< Current iteration
-	uint64_t  write_req_id_;       ///< Request ID of write operation
-	uint64_t  read_req_id_;        ///< Request ID of read operation
-	uint32_t  read_data_;          ///< Data read from device
-	uint32_t  status_data_;        ///< Status register value
-	bool      waiting_response_;   ///< Waiting for response
+	TestState test_state_;        ///< Current test state
+	uint32_t  iteration_;         ///< Current iteration
+	uint64_t  write_req_id_;      ///< Request ID of write operation
+	uint64_t  read_req_id_;       ///< Request ID of read operation
+	uint32_t  read_data_;         ///< Data read from device
+	uint32_t  status_data_;       ///< Status register value
+	bool      waiting_response_;  ///< Waiting for response
 
 	// Statistics
-	uint64_t total_loads_;         ///< Total load operations
-	uint64_t total_stores_;        ///< Total store operations
-	uint64_t total_successes_;     ///< Total successful tests
-	uint64_t total_failures_;      ///< Total failed tests
+	uint64_t total_loads_;      ///< Total load operations
+	uint64_t total_stores_;     ///< Total store operations
+	uint64_t total_successes_;  ///< Total successful tests
+	uint64_t total_failures_;   ///< Total failed tests
 
 	// Device register offsets
 	static constexpr uint64_t REG_DATA_IN  = 0x00;

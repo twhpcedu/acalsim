@@ -1,3 +1,17 @@
+# Copyright 2023-2025 Playlab/ACAL
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python3
 """
 Copyright 2023-2025 Playlab/ACAL
@@ -14,7 +28,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
 """
 QEMU-ACALSim Echo Device Distributed Simulation Configuration
 
@@ -59,7 +72,7 @@ CLOCK_FREQ = "1GHz"
 
 # Device memory-mapped region
 DEVICE_BASE_ADDR = "0x10000000"  # 256MB base address
-DEVICE_SIZE = "4096"             # 4KB device region
+DEVICE_SIZE = "4096"  # 4KB device region
 
 # Link latency (inter-process communication)
 LINK_LATENCY = "1ns"
@@ -87,7 +100,7 @@ print(f"[DEBUG] SST Configuration: Rank {rank} of {nranks}", flush=True)
 
 # Verify we have exactly 2 ranks
 if nranks != 2:
-    raise RuntimeError(f"This simulation requires exactly 2 MPI ranks, got {nranks}")
+	raise RuntimeError(f"This simulation requires exactly 2 MPI ranks, got {nranks}")
 
 print(f"[DEBUG] Rank {rank}: Creating all components (will be distributed by SST)", flush=True)
 
@@ -147,17 +160,17 @@ sst.setStatisticLoadLevel(7)
 # ==============================================================================
 
 if rank == 0:
-    print("\n" + "="*70)
-    print("QEMU-ACALSim Distributed Simulation Configuration")
-    print("="*70)
-    print(f"Clock Frequency:      {CLOCK_FREQ}")
-    print(f"Device Base Address:  {DEVICE_BASE_ADDR}")
-    print(f"Device Size:          {DEVICE_SIZE} bytes")
-    print(f"Link Latency:         {LINK_LATENCY}")
-    print(f"Test Pattern:         {TEST_PATTERN}")
-    print(f"Test Iterations:      {NUM_ITERATIONS}")
-    print(f"Echo Latency:         {ECHO_LATENCY} cycles")
-    print("\nProcess Distribution:")
-    print(f"  Rank 0: QEMU component (test program)")
-    print(f"  Rank 1: ACALSim device (echo device)")
-    print("="*70 + "\n")
+	print("\n" + "=" * 70)
+	print("QEMU-ACALSim Distributed Simulation Configuration")
+	print("=" * 70)
+	print(f"Clock Frequency:      {CLOCK_FREQ}")
+	print(f"Device Base Address:  {DEVICE_BASE_ADDR}")
+	print(f"Device Size:          {DEVICE_SIZE} bytes")
+	print(f"Link Latency:         {LINK_LATENCY}")
+	print(f"Test Pattern:         {TEST_PATTERN}")
+	print(f"Test Iterations:      {NUM_ITERATIONS}")
+	print(f"Echo Latency:         {ECHO_LATENCY} cycles")
+	print("\nProcess Distribution:")
+	print(f"  Rank 0: QEMU component (test program)")
+	print(f"  Rank 1: ACALSim device (echo device)")
+	print("=" * 70 + "\n")

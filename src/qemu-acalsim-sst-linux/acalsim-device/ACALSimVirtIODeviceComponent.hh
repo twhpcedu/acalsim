@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2023-2025 Playlab/ACAL
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +18,11 @@
 #define ACALSIM_VIRTIO_DEVICE_COMPONENT_HH
 
 #include <sst/core/component.h>
-#include <sst/core/output.h>
 #include <sst/core/link.h>
+#include <sst/core/output.h>
 
-#include <string>
 #include <cstdint>
+#include <string>
 
 namespace ACALSim {
 namespace VirtIO {
@@ -39,95 +39,85 @@ namespace VirtIO {
  */
 class ACALSimVirtIODeviceComponent : public SST::Component {
 public:
-    /**
-     * @brief Constructor
-     * @param id Component ID
-     * @param params Component parameters
-     */
-    ACALSimVirtIODeviceComponent(SST::ComponentId_t id, SST::Params& params);
+	/**
+	 * @brief Constructor
+	 * @param id Component ID
+	 * @param params Component parameters
+	 */
+	ACALSimVirtIODeviceComponent(SST::ComponentId_t id, SST::Params& params);
 
-    /**
-     * @brief Destructor
-     */
-    ~ACALSimVirtIODeviceComponent();
+	/**
+	 * @brief Destructor
+	 */
+	~ACALSimVirtIODeviceComponent();
 
-    /**
-     * @brief SST setup phase
-     */
-    void setup() override;
+	/**
+	 * @brief SST setup phase
+	 */
+	void setup() override;
 
-    /**
-     * @brief SST finish phase
-     */
-    void finish() override;
+	/**
+	 * @brief SST finish phase
+	 */
+	void finish() override;
 
-    /**
-     * @brief Clock handler
-     * @param cycle Current cycle
-     * @return false to continue, true to stop
-     */
-    bool clockTick(SST::Cycle_t cycle);
+	/**
+	 * @brief Clock handler
+	 * @param cycle Current cycle
+	 * @return false to continue, true to stop
+	 */
+	bool clockTick(SST::Cycle_t cycle);
 
-    // SST ELI Registration
-    SST_ELI_REGISTER_COMPONENT(
-        ACALSimVirtIODeviceComponent,
-        "acalsim",
-        "VirtIODevice",
-        SST_ELI_ELEMENT_VERSION(1, 0, 0),
-        "ACALSim VirtIO Device for Linux Integration",
-        COMPONENT_CATEGORY_UNCATEGORIZED
-    )
+	// SST ELI Registration
+	SST_ELI_REGISTER_COMPONENT(ACALSimVirtIODeviceComponent, "acalsim", "VirtIODevice",
+	                           SST_ELI_ELEMENT_VERSION(1, 0, 0), "ACALSim VirtIO Device for Linux Integration",
+	                           COMPONENT_CATEGORY_UNCATEGORIZED)
 
-    // Parameter documentation
-    SST_ELI_DOCUMENT_PARAMS(
-        {"socket_path", "Unix domain socket path", "/tmp/qemu-sst-linux.sock"},
-        {"device_id", "Device identifier", "0"},
-        {"verbose", "Verbosity level (0-3)", "1"},
-        {"clock", "Clock frequency", "1GHz"}
-    )
+	// Parameter documentation
+	SST_ELI_DOCUMENT_PARAMS({"socket_path", "Unix domain socket path", "/tmp/qemu-sst-linux.sock"},
+	                        {"device_id", "Device identifier", "0"}, {"verbose", "Verbosity level (0-3)", "1"},
+	                        {"clock", "Clock frequency", "1GHz"})
 
-    // Statistics
-    SST_ELI_DOCUMENT_STATISTICS(
-        {"total_requests", "Total requests processed", "requests", 1},
-        {"noop_requests", "NOOP requests", "requests", 1},
-        {"echo_requests", "ECHO requests", "requests", 1},
-        {"compute_requests", "COMPUTE requests", "requests", 1}
-    )
+	// Statistics
+	SST_ELI_DOCUMENT_STATISTICS({"total_requests", "Total requests processed", "requests", 1},
+	                            {"noop_requests", "NOOP requests", "requests", 1},
+	                            {"echo_requests", "ECHO requests", "requests", 1},
+	                            {"compute_requests", "COMPUTE requests", "requests", 1})
 
 private:
-    // Socket management
-    void initSocket();
-    void cleanupSocket();
-    void checkForConnections();
-    void handleSocketData();
+	// Socket management
+	void initSocket();
+	void cleanupSocket();
+	void checkForConnections();
+	void handleSocketData();
 
-    // Request processing
-    void processRequest(const uint8_t* data, size_t len);
-    void sendResponse(const uint8_t* data, size_t len);
+	// Request processing
+	void processRequest(const uint8_t* data, size_t len);
+	void sendResponse(const uint8_t* data, size_t len);
 
-    // Configuration
-    std::string socket_path_;
-    uint32_t device_id_;
-    int verbose_;
+	// Configuration
+	std::string socket_path_;
+	uint32_t    device_id_;
+	int         verbose_;
 
-    // Socket state
-    int server_fd_;
-    int client_fd_;
-    bool client_connected_;
+	// Socket state
+	int  server_fd_;
+	int  client_fd_;
+	bool client_connected_;
 
-    // SST infrastructure
-    SST::Output out_;
-    SST::Clock::Handler<ACALSimVirtIODeviceComponent>* clock_handler_;
+	// SST infrastructure
+	SST::Output                                        out_;
+	SST::Clock::Handler<ACALSimVirtIODeviceComponent>* clock_handler_;
 
-    // Statistics
-    SST::Cycle_t current_cycle_;
-    uint64_t total_requests_;
-    uint64_t noop_requests_;
-    uint64_t echo_requests_;
-    uint64_t compute_requests_;
+	// Statistics
+	SST::Cycle_t current_cycle_;
+	uint64_t     total_requests_;
+	uint64_t     noop_requests_;
+	uint64_t     echo_requests_;
+	uint64_t     compute_requests_;
 };
 
-} // namespace VirtIO
-} // namespace ACALSim
+}  // namespace VirtIO
+}  // namespace ACALSim
 
-#endif // ACALSIM_VIRTIO_DEVICE_COMPONENT_HH
+#endif  // ACALSIM_VIRTIO_DEVICE_COMPONENT_HH

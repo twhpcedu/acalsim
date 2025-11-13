@@ -26,46 +26,46 @@ echo ""
 ROOTFS_SOURCE=${ROOTFS_SOURCE:-/home/user/rootfs}
 ROOTFS_DISK=${ROOTFS_DISK:-/home/user/rootfs-persistent.qcow2}
 ROOTFS_EXT2=${ROOTFS_EXT2:-/home/user/rootfs-persistent.ext2}
-ROOTFS_SIZE_MB=${ROOTFS_SIZE_MB:-10240}  # 10GB
+ROOTFS_SIZE_MB=${ROOTFS_SIZE_MB:-10240} # 10GB
 
 echo "Configuration:"
 echo "  Source rootfs: $ROOTFS_SOURCE"
 echo "  Output disk: $ROOTFS_DISK"
-echo "  Size: ${ROOTFS_SIZE_MB}MB (~$((ROOTFS_SIZE_MB/1024))GB)"
+echo "  Size: ${ROOTFS_SIZE_MB}MB (~$((ROOTFS_SIZE_MB / 1024))GB)"
 echo ""
 
 # Check if rootfs exists
 if [ ! -d "$ROOTFS_SOURCE" ]; then
-    echo -e "${RED}✗${NC} Source rootfs not found: $ROOTFS_SOURCE"
-    exit 1
+	echo -e "${RED}✗${NC} Source rootfs not found: $ROOTFS_SOURCE"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Source rootfs found"
 
 # Check if disk already exists
 if [ -f "$ROOTFS_DISK" ]; then
-    echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
-    read -p "Overwrite? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted"
-        exit 1
-    fi
-    rm -f "$ROOTFS_DISK" "$ROOTFS_EXT2"
+	echo -e "${YELLOW}⚠${NC}  Disk image already exists: $ROOTFS_DISK"
+	read -p "Overwrite? (y/N) " -n 1 -r
+	echo
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Aborted"
+		exit 1
+	fi
+	rm -f "$ROOTFS_DISK" "$ROOTFS_EXT2"
 fi
 
 echo ""
 echo "Installing genext2fs..."
 
 # Install genext2fs if not available
-if ! command -v genext2fs &> /dev/null; then
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq genext2fs > /dev/null 2>&1
+if ! command -v genext2fs &>/dev/null; then
+	sudo apt-get update -qq
+	sudo apt-get install -y -qq genext2fs >/dev/null 2>&1
 
-    if ! command -v genext2fs &> /dev/null; then
-        echo -e "${RED}✗${NC} Failed to install genext2fs"
-        exit 1
-    fi
+	if ! command -v genext2fs &>/dev/null; then
+		echo -e "${RED}✗${NC} Failed to install genext2fs"
+		exit 1
+	fi
 fi
 
 echo -e "${GREEN}✓${NC} genext2fs available"
@@ -80,9 +80,9 @@ STAGING_DIR=$(mktemp -d)
 # We'll let devtmpfs populate /dev at boot time
 cd "$ROOTFS_SOURCE"
 for item in *; do
-    if [ "$item" != "dev" ]; then
-        cp -a "$item" "$STAGING_DIR/" 2>/dev/null || true
-    fi
+	if [ "$item" != "dev" ]; then
+		cp -a "$item" "$STAGING_DIR/" 2>/dev/null || true
+	fi
 done
 
 # Create empty dev directory
@@ -105,7 +105,7 @@ echo "Calculating filesystem size..."
 # Get size in KB
 SIZE_KB=$(du -sk "$STAGING_DIR" | cut -f1)
 # Add 20% overhead + 100MB for future growth
-BLOCKS=$((SIZE_KB + SIZE_KB/5 + 102400))
+BLOCKS=$((SIZE_KB + SIZE_KB / 5 + 102400))
 
 echo "  Source size: ${SIZE_KB}KB"
 echo "  Filesystem blocks: ${BLOCKS}"
@@ -116,9 +116,9 @@ echo "Creating ext2 filesystem..."
 genext2fs -b $BLOCKS -d "$STAGING_DIR" "$ROOTFS_EXT2"
 
 if [ ! -f "$ROOTFS_EXT2" ]; then
-    echo -e "${RED}✗${NC} Failed to create ext2 filesystem"
-    rm -rf "$STAGING_DIR"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to create ext2 filesystem"
+	rm -rf "$STAGING_DIR"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Ext2 filesystem created"
@@ -129,13 +129,13 @@ rm -rf "$STAGING_DIR"
 # Resize to desired size
 echo ""
 echo "Resizing to ${ROOTFS_SIZE_MB}MB..."
-e2fsck -f -y "$ROOTFS_EXT2" > /dev/null 2>&1 || true
-resize2fs "$ROOTFS_EXT2" "${ROOTFS_SIZE_MB}M" > /dev/null 2>&1
+e2fsck -f -y "$ROOTFS_EXT2" >/dev/null 2>&1 || true
+resize2fs "$ROOTFS_EXT2" "${ROOTFS_SIZE_MB}M" >/dev/null 2>&1
 
 # Convert ext2 to ext4
 echo "Converting to ext4..."
-tune2fs -O extents,uninit_bg,dir_index "$ROOTFS_EXT2" > /dev/null 2>&1
-e2fsck -f -y "$ROOTFS_EXT2" > /dev/null 2>&1 || true
+tune2fs -O extents,uninit_bg,dir_index "$ROOTFS_EXT2" >/dev/null 2>&1
+e2fsck -f -y "$ROOTFS_EXT2" >/dev/null 2>&1 || true
 
 echo -e "${GREEN}✓${NC} Filesystem ready"
 
@@ -145,8 +145,8 @@ echo "Converting to qcow2..."
 qemu-img convert -f raw -O qcow2 "$ROOTFS_EXT2" "$ROOTFS_DISK"
 
 if [ ! -f "$ROOTFS_DISK" ]; then
-    echo -e "${RED}✗${NC} Failed to convert to qcow2"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to convert to qcow2"
+	exit 1
 fi
 
 # Cleanup ext2 file
@@ -160,7 +160,7 @@ echo -e "${GREEN}✓${NC} Created: $ROOTFS_DISK ($DISK_SIZE)"
 echo ""
 echo "Creating boot script..."
 
-cat > "$(dirname "$0")/run_qemu_persistent.sh" << 'EOFSCRIPT'
+cat >"$(dirname "$0")/run_qemu_persistent.sh" <<'EOFSCRIPT'
 #!/bin/bash
 # Boot from persistent root disk
 

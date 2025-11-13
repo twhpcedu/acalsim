@@ -46,8 +46,8 @@
 #define CONTROL_RESET 0x01  // Reset device
 
 // Test configuration
-#define TEST_PATTERN   0xDEADBEEF
-#define NUM_ITERATIONS 5
+#define TEST_PATTERN    0xDEADBEEF
+#define NUM_ITERATIONS  5
 #define MAX_WAIT_CYCLES 1000
 
 // Simple print function (would be replaced with UART output in real QEMU)
@@ -58,24 +58,20 @@ void print_result(const char* msg, int passed);
 /**
  * @brief Write to device register
  */
-static inline void write_reg(volatile uint32_t* addr, uint32_t value) {
-	*addr = value;
-}
+static inline void write_reg(volatile uint32_t* addr, uint32_t value) { *addr = value; }
 
 /**
  * @brief Read from device register
  */
-static inline uint32_t read_reg(volatile uint32_t* addr) {
-	return *addr;
-}
+static inline uint32_t read_reg(volatile uint32_t* addr) { return *addr; }
 
 /**
  * @brief Wait for device to complete operation
  * @return 0 on success, -1 on timeout
  */
 int wait_device_ready(void) {
-	volatile uint32_t* status = (volatile uint32_t*)REG_STATUS;
-	int wait_cycles = 0;
+	volatile uint32_t* status      = (volatile uint32_t*)REG_STATUS;
+	int                wait_cycles = 0;
 
 	// Wait for device to clear BUSY and set DATA_READY
 	while (wait_cycles < MAX_WAIT_CYCLES) {
@@ -108,7 +104,7 @@ void reset_device(void) {
 int test_echo(uint32_t pattern) {
 	volatile uint32_t* data_in  = (volatile uint32_t*)REG_DATA_IN;
 	volatile uint32_t* data_out = (volatile uint32_t*)REG_DATA_OUT;
-	uint32_t result;
+	uint32_t           result;
 
 	// Write test pattern to device
 	write_reg(data_in, pattern);
@@ -140,7 +136,7 @@ int test_echo(uint32_t pattern) {
  */
 int main(void) {
 	int i;
-	int failures = 0;
+	int failures  = 0;
 	int successes = 0;
 
 	print_str("==============================================\n");

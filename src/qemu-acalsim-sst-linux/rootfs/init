@@ -27,27 +27,27 @@ mount -t devpts none /dev/pts
 # Load virtio-sst kernel module
 echo "Loading virtio-sst kernel module..."
 if [ -f /lib/modules/$(uname -r)/extra/virtio-sst.ko ]; then
-    insmod /lib/modules/$(uname -r)/extra/virtio-sst.ko
+	insmod /lib/modules/$(uname -r)/extra/virtio-sst.ko
 elif [ -f /virtio-sst.ko ]; then
-    insmod /virtio-sst.ko
+	insmod /virtio-sst.ko
 else
-    echo "Warning: virtio-sst.ko not found"
+	echo "Warning: virtio-sst.ko not found"
 fi
 
 # Wait for device to appear
 echo "Waiting for SST device..."
 for i in 1 2 3 4 5; do
-    if [ -c /dev/sst0 ]; then
-        echo "SST device found: /dev/sst0"
-        break
-    fi
-    echo "  Waiting... ($i/5)"
-    sleep 1
+	if [ -c /dev/sst0 ]; then
+		echo "SST device found: /dev/sst0"
+		break
+	fi
+	echo "  Waiting... ($i/5)"
+	sleep 1
 done
 
 if [ ! -c /dev/sst0 ]; then
-    echo "Error: SST device not found!"
-    echo "Check QEMU VirtIO device configuration"
+	echo "Error: SST device not found!"
+	echo "Check QEMU VirtIO device configuration"
 fi
 
 # Show system information
@@ -69,9 +69,9 @@ ls -l /dev/sst* 2>/dev/null || echo "  No SST devices found"
 
 # Run automatic tests if present
 if [ -f /apps/auto-test.sh ]; then
-    echo ""
-    echo "Running automatic tests..."
-    /apps/auto-test.sh
+	echo ""
+	echo "Running automatic tests..."
+	/apps/auto-test.sh
 fi
 
 # Interactive shell or command from kernel cmdline
@@ -83,9 +83,9 @@ echo ""
 
 # Check if a command was specified in kernel command line
 if grep -q "init_cmd=" /proc/cmdline; then
-    CMD=$(cat /proc/cmdline | sed 's/.*init_cmd=\([^ ]*\).*/\1/')
-    echo "Executing: $CMD"
-    exec $CMD
+	CMD=$(cat /proc/cmdline | sed 's/.*init_cmd=\([^ ]*\).*/\1/')
+	echo "Executing: $CMD"
+	exec $CMD
 fi
 
 # Start interactive shell

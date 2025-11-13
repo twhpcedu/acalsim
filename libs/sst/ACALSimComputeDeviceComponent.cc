@@ -15,6 +15,7 @@
  */
 
 #include "sst/ACALSimComputeDeviceComponent.hh"
+
 #include <cstdio>
 
 using namespace ACALSim::QEMUIntegration;
@@ -24,12 +25,11 @@ using namespace ACALSim::QEMUIntegration;
 //
 ACALSimComputeDeviceComponent::ACALSimComputeDeviceComponent(SST::ComponentId_t id, SST::Params& params)
     : SST::Component(id) {
-
 	// Get parameters
-	base_addr_ = params.find<uint64_t>("base_addr", 0x10300000);
-	size_ = params.find<uint64_t>("size", 4096);
+	base_addr_       = params.find<uint64_t>("base_addr", 0x10300000);
+	size_            = params.find<uint64_t>("size", 4096);
 	compute_latency_ = params.find<uint64_t>("compute_latency", 100);
-	int verbose = params.find<int>("verbose", 1);
+	int verbose      = params.find<int>("verbose", 1);
 
 	// Initialize output
 	out_.init("ComputeDevice[@f:@l:@p] ", verbose, 0, SST::Output::STDOUT);
@@ -37,9 +37,7 @@ ACALSimComputeDeviceComponent::ACALSimComputeDeviceComponent(SST::ComponentId_t 
 	// Configure CPU link
 	cpu_link_ = configureLink("cpu_port", new SST::Event::Handler<ACALSimComputeDeviceComponent>(
 	                                          this, &ACALSimComputeDeviceComponent::handleMemoryTransaction));
-	if (!cpu_link_) {
-		out_.fatal(CALL_INFO, -1, "Failed to configure cpu_port\n");
-	}
+	if (!cpu_link_) { out_.fatal(CALL_INFO, -1, "Failed to configure cpu_port\n"); }
 
 	// Configure peer link (optional - may not be connected)
 	peer_link_ = configureLink("peer_port", new SST::Event::Handler<ACALSimComputeDeviceComponent>(
@@ -47,17 +45,17 @@ ACALSimComputeDeviceComponent::ACALSimComputeDeviceComponent(SST::ComponentId_t 
 
 	// Register clock
 	std::string clock_freq = params.find<std::string>("clock", "1GHz");
-	tc_ = registerClock(clock_freq, new SST::Clock::Handler<ACALSimComputeDeviceComponent>(
-	                                     this, &ACALSimComputeDeviceComponent::clockTick));
+	tc_                    = registerClock(clock_freq, new SST::Clock::Handler<ACALSimComputeDeviceComponent>(
+                                        this, &ACALSimComputeDeviceComponent::clockTick));
 
 	// Initialize device state
 	resetDevice();
 
 	// Initialize statistics
-	total_loads_ = 0;
-	total_stores_ = 0;
+	total_loads_        = 0;
+	total_stores_       = 0;
 	total_computations_ = 0;
-	total_peer_msgs_ = 0;
+	total_peer_msgs_    = 0;
 
 	out_.verbose(CALL_INFO, 1, 0, "ComputeDevice initialized at base=0x%lx size=%lu\n", base_addr_, size_);
 }
@@ -72,9 +70,7 @@ ACALSimComputeDeviceComponent::~ACALSimComputeDeviceComponent() {
 //
 // Setup
 //
-void ACALSimComputeDeviceComponent::setup() {
-	out_.verbose(CALL_INFO, 1, 0, "Setting up ComputeDevice\n");
-}
+void ACALSimComputeDeviceComponent::setup() { out_.verbose(CALL_INFO, 1, 0, "Setting up ComputeDevice\n"); }
 
 //
 // Finish
@@ -95,9 +91,7 @@ bool ACALSimComputeDeviceComponent::clockTick(SST::Cycle_t cycle) {
 	current_cycle_ = cycle;
 
 	// Check if computation is complete
-	if (compute_pending_ && cycle >= compute_complete_cycle_) {
-		completeComputation();
-	}
+	if (compute_pending_ && cycle >= compute_complete_cycle_) { completeComputation(); }
 
 	return false;  // Continue simulation
 }
@@ -107,21 +101,18 @@ bool ACALSimComputeDeviceComponent::clockTick(SST::Cycle_t cycle) {
 //
 void ACALSimComputeDeviceComponent::handleMemoryTransaction(SST::Event* ev) {
 	auto* trans = dynamic_cast<MemoryTransactionEvent*>(ev);
-	if (!trans) {
-		out_.fatal(CALL_INFO, -1, "Received invalid event type\n");
-	}
+	if (!trans) { out_.fatal(CALL_INFO, -1, "Received invalid event type\n"); }
 
 	// Get transaction details
-	TransactionType type = trans->getType();
-	uint64_t        addr = trans->getAddress();
-	uint32_t        data = trans->getData();
-	uint32_t        size = trans->getSize();
+	TransactionType type   = trans->getType();
+	uint64_t        addr   = trans->getAddress();
+	uint32_t        data   = trans->getData();
+	uint32_t        size   = trans->getSize();
 	uint64_t        req_id = trans->getReqId();
 
 	// Calculate offset from base address
 	if (addr < base_addr_ || addr >= base_addr_ + size_) {
-		out_.fatal(CALL_INFO, -1, "Address 0x%lx out of range [0x%lx, 0x%lx)\n", addr, base_addr_,
-		           base_addr_ + size_);
+		out_.fatal(CALL_INFO, -1, "Address 0x%lx out of range [0x%lx, 0x%lx)\n", addr, base_addr_, base_addr_ + size_);
 	}
 	uint64_t offset = addr - base_addr_;
 
@@ -151,41 +142,39 @@ void ACALSimComputeDeviceComponent::handlePeerMessage(SST::Event* ev) {
 	out_.verbose(CALL_INFO, 2, 0, "Received peer message: type=%u data=0x%08x\n", type, data);
 
 	switch (type) {
-	case DeviceMessageEvent::DATA_REQUEST:
-		// Peer is requesting data - send our current result
-		if (peer_link_) {
-			peer_link_->send(new DeviceMessageEvent(DeviceMessageEvent::DATA_RESPONSE, result_, 0));
-			out_.verbose(CALL_INFO, 2, 0, "Sent result 0x%08x to peer\n", result_);
-		}
-		break;
+		case DeviceMessageEvent::DATA_REQUEST:
+			// Peer is requesting data - send our current result
+			if (peer_link_) {
+				peer_link_->send(new DeviceMessageEvent(DeviceMessageEvent::DATA_RESPONSE, result_, 0));
+				out_.verbose(CALL_INFO, 2, 0, "Sent result 0x%08x to peer\n", result_);
+			}
+			break;
 
-	case DeviceMessageEvent::DATA_RESPONSE:
-		// Peer sent us data - store in peer_data_in
-		peer_data_in_ = data;
-		status_ |= STATUS_PEER_READY;
-		out_.verbose(CALL_INFO, 2, 0, "Received data 0x%08x from peer\n", data);
-		break;
+		case DeviceMessageEvent::DATA_RESPONSE:
+			// Peer sent us data - store in peer_data_in
+			peer_data_in_ = data;
+			status_ |= STATUS_PEER_READY;
+			out_.verbose(CALL_INFO, 2, 0, "Received data 0x%08x from peer\n", data);
+			break;
 
-	case DeviceMessageEvent::COMPUTE_REQUEST:
-		// Peer is requesting computation - perform operation and send result
-		// For simplicity, just double the value
-		if (peer_link_) {
-			uint32_t result = data * 2;
-			peer_link_->send(new DeviceMessageEvent(DeviceMessageEvent::COMPUTE_RESPONSE, result, 0));
-			out_.verbose(CALL_INFO, 2, 0, "Computed result 0x%08x for peer\n", result);
-		}
-		break;
+		case DeviceMessageEvent::COMPUTE_REQUEST:
+			// Peer is requesting computation - perform operation and send result
+			// For simplicity, just double the value
+			if (peer_link_) {
+				uint32_t result = data * 2;
+				peer_link_->send(new DeviceMessageEvent(DeviceMessageEvent::COMPUTE_RESPONSE, result, 0));
+				out_.verbose(CALL_INFO, 2, 0, "Computed result 0x%08x for peer\n", result);
+			}
+			break;
 
-	case DeviceMessageEvent::COMPUTE_RESPONSE:
-		// Peer sent computation result
-		peer_data_in_ = data;
-		status_ |= STATUS_PEER_READY;
-		out_.verbose(CALL_INFO, 2, 0, "Received computation result 0x%08x from peer\n", data);
-		break;
+		case DeviceMessageEvent::COMPUTE_RESPONSE:
+			// Peer sent computation result
+			peer_data_in_ = data;
+			status_ |= STATUS_PEER_READY;
+			out_.verbose(CALL_INFO, 2, 0, "Received computation result 0x%08x from peer\n", data);
+			break;
 
-	default:
-		out_.verbose(CALL_INFO, 1, 0, "Unknown peer message type: %u\n", type);
-		break;
+		default: out_.verbose(CALL_INFO, 1, 0, "Unknown peer message type: %u\n", type); break;
 	}
 
 	delete ev;
@@ -226,27 +215,18 @@ void ACALSimComputeDeviceComponent::processStore(uint64_t addr, uint32_t data, u
 //
 uint32_t ACALSimComputeDeviceComponent::readRegister(uint64_t offset) {
 	switch (offset) {
-	case REG_OPERAND_A:
-		return operand_a_;
-	case REG_OPERAND_B:
-		return operand_b_;
-	case REG_OPERATION:
-		return operation_;
-	case REG_RESULT:
-		return result_;
-	case REG_STATUS:
-		return status_;
-	case REG_CONTROL:
-		return control_;
-	case REG_PEER_DATA_OUT:
-		return peer_data_out_;
-	case REG_PEER_DATA_IN:
-		// Clear PEER_READY bit on read
-		status_ &= ~STATUS_PEER_READY;
-		return peer_data_in_;
-	default:
-		out_.verbose(CALL_INFO, 1, 0, "Read from unknown register offset 0x%lx\n", offset);
-		return 0;
+		case REG_OPERAND_A: return operand_a_;
+		case REG_OPERAND_B: return operand_b_;
+		case REG_OPERATION: return operation_;
+		case REG_RESULT: return result_;
+		case REG_STATUS: return status_;
+		case REG_CONTROL: return control_;
+		case REG_PEER_DATA_OUT: return peer_data_out_;
+		case REG_PEER_DATA_IN:
+			// Clear PEER_READY bit on read
+			status_ &= ~STATUS_PEER_READY;
+			return peer_data_in_;
+		default: out_.verbose(CALL_INFO, 1, 0, "Read from unknown register offset 0x%lx\n", offset); return 0;
 	}
 }
 
@@ -255,36 +235,24 @@ uint32_t ACALSimComputeDeviceComponent::readRegister(uint64_t offset) {
 //
 void ACALSimComputeDeviceComponent::writeRegister(uint64_t offset, uint32_t value) {
 	switch (offset) {
-	case REG_OPERAND_A:
-		operand_a_ = value;
-		break;
+		case REG_OPERAND_A: operand_a_ = value; break;
 
-	case REG_OPERAND_B:
-		operand_b_ = value;
-		break;
+		case REG_OPERAND_B: operand_b_ = value; break;
 
-	case REG_OPERATION:
-		operation_ = value;
-		break;
+		case REG_OPERATION: operation_ = value; break;
 
-	case REG_CONTROL:
-		control_ = value;
-		if (value & CONTROL_RESET) {
-			resetDevice();
-		}
-		if (value & CONTROL_TRIGGER) {
-			triggerComputation();
-		}
-		break;
+		case REG_CONTROL:
+			control_ = value;
+			if (value & CONTROL_RESET) { resetDevice(); }
+			if (value & CONTROL_TRIGGER) { triggerComputation(); }
+			break;
 
-	case REG_PEER_DATA_OUT:
-		peer_data_out_ = value;
-		sendToPeer(value);
-		break;
+		case REG_PEER_DATA_OUT:
+			peer_data_out_ = value;
+			sendToPeer(value);
+			break;
 
-	default:
-		out_.verbose(CALL_INFO, 1, 0, "Write to unknown/read-only register offset 0x%lx\n", offset);
-		break;
+		default: out_.verbose(CALL_INFO, 1, 0, "Write to unknown/read-only register offset 0x%lx\n", offset); break;
 	}
 }
 
@@ -304,7 +272,7 @@ void ACALSimComputeDeviceComponent::triggerComputation() {
 	status_ = STATUS_BUSY;
 
 	// Schedule computation completion
-	compute_pending_ = true;
+	compute_pending_        = true;
 	compute_complete_cycle_ = current_cycle_ + compute_latency_;
 
 	total_computations_++;
@@ -319,27 +287,21 @@ void ACALSimComputeDeviceComponent::completeComputation() {
 	// Perform operation
 	bool error = false;
 	switch (operation_) {
-	case OP_ADD:
-		result_ = operand_a_ + operand_b_;
-		break;
-	case OP_SUB:
-		result_ = operand_a_ - operand_b_;
-		break;
-	case OP_MUL:
-		result_ = operand_a_ * operand_b_;
-		break;
-	case OP_DIV:
-		if (operand_b_ == 0) {
+		case OP_ADD: result_ = operand_a_ + operand_b_; break;
+		case OP_SUB: result_ = operand_a_ - operand_b_; break;
+		case OP_MUL: result_ = operand_a_ * operand_b_; break;
+		case OP_DIV:
+			if (operand_b_ == 0) {
+				result_ = 0;
+				error   = true;
+			} else {
+				result_ = operand_a_ / operand_b_;
+			}
+			break;
+		default:
 			result_ = 0;
-			error = true;
-		} else {
-			result_ = operand_a_ / operand_b_;
-		}
-		break;
-	default:
-		result_ = 0;
-		error = true;
-		break;
+			error   = true;
+			break;
 	}
 
 	// Update status
@@ -356,17 +318,17 @@ void ACALSimComputeDeviceComponent::completeComputation() {
 // Reset device
 //
 void ACALSimComputeDeviceComponent::resetDevice() {
-	operand_a_ = 0;
-	operand_b_ = 0;
-	operation_ = OP_ADD;
-	result_ = 0;
-	status_ = 0;
-	control_ = 0;
-	peer_data_out_ = 0;
-	peer_data_in_ = 0;
-	compute_pending_ = false;
+	operand_a_              = 0;
+	operand_b_              = 0;
+	operation_              = OP_ADD;
+	result_                 = 0;
+	status_                 = 0;
+	control_                = 0;
+	peer_data_out_          = 0;
+	peer_data_in_           = 0;
+	compute_pending_        = false;
 	compute_complete_cycle_ = 0;
-	pending_req_id_ = 0;
+	pending_req_id_         = 0;
 
 	out_.verbose(CALL_INFO, 2, 0, "Device reset\n");
 }

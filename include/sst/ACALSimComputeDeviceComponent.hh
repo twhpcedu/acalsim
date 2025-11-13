@@ -18,9 +18,10 @@
 #define __ACALSIM_COMPUTE_DEVICE_COMPONENT_HH__
 
 #include <sst/core/component.h>
-#include <sst/core/link.h>
 #include <sst/core/event.h>
+#include <sst/core/link.h>
 #include <sst/core/output.h>
+
 #include "ACALSimDeviceComponent.hh"  // For event types
 
 namespace ACALSim {
@@ -37,10 +38,10 @@ public:
 	 * @brief Message types for inter-device communication
 	 */
 	enum MessageType : uint8_t {
-		DATA_REQUEST  = 0,  ///< Request data from peer
-		DATA_RESPONSE = 1,  ///< Respond with data
-		COMPUTE_REQUEST = 2,  ///< Request computation from peer
-		COMPUTE_RESPONSE = 3  ///< Respond with computation result
+		DATA_REQUEST     = 0,  ///< Request data from peer
+		DATA_RESPONSE    = 1,  ///< Respond with data
+		COMPUTE_REQUEST  = 2,  ///< Request computation from peer
+		COMPUTE_RESPONSE = 3   ///< Respond with computation result
 	};
 
 	/**
@@ -54,8 +55,7 @@ public:
 	 * @param data Data payload
 	 * @param param Additional parameter
 	 */
-	DeviceMessageEvent(MessageType type, uint32_t data, uint32_t param)
-	    : type_(type), data_(data), param_(param) {}
+	DeviceMessageEvent(MessageType type, uint32_t data, uint32_t param) : type_(type), data_(data), param_(param) {}
 
 	// Getters
 	MessageType getType() const { return type_; }
@@ -65,9 +65,9 @@ public:
 	// SST Event interface
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& type_;
-		ser& data_;
-		ser& param_;
+		ser & type_;
+		ser & data_;
+		ser & param_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::DeviceMessageEvent);
@@ -110,10 +110,8 @@ public:
 	/**
 	 * @brief Parameter documentation
 	 */
-	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"},
-	                        {"base_addr", "Device base address", "0x10300000"},
-	                        {"size", "Device memory size", "4096"},
-	                        {"verbose", "Verbosity level", "1"},
+	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"}, {"base_addr", "Device base address", "0x10300000"},
+	                        {"size", "Device memory size", "4096"}, {"verbose", "Verbosity level", "1"},
 	                        {"compute_latency", "Computation latency in cycles", "100"})
 
 	/**
@@ -239,26 +237,26 @@ private:
 	void sendToPeer(uint32_t data);
 
 	// SST infrastructure
-	SST::Output         out_;         ///< Output handler
-	SST::Link*          cpu_link_;    ///< Link to CPU (QEMU)
-	SST::Link*          peer_link_;   ///< Link to peer device
-	SST::TimeConverter* tc_;          ///< Time converter
+	SST::Output         out_;            ///< Output handler
+	SST::Link*          cpu_link_;       ///< Link to CPU (QEMU)
+	SST::Link*          peer_link_;      ///< Link to peer device
+	SST::TimeConverter* tc_;             ///< Time converter
 	SST::Cycle_t        current_cycle_;  ///< Current cycle
 
 	// Device configuration
-	uint64_t base_addr_;         ///< Base address in memory map
-	uint64_t size_;              ///< Device memory size
-	uint64_t compute_latency_;   ///< Computation latency
+	uint64_t base_addr_;        ///< Base address in memory map
+	uint64_t size_;             ///< Device memory size
+	uint64_t compute_latency_;  ///< Computation latency
 
 	// Device state - registers
-	uint32_t operand_a_;         ///< OPERAND_A register
-	uint32_t operand_b_;         ///< OPERAND_B register
-	uint32_t operation_;         ///< OPERATION register
-	uint32_t result_;            ///< RESULT register
-	uint32_t status_;            ///< STATUS register
-	uint32_t control_;           ///< CONTROL register
-	uint32_t peer_data_out_;     ///< PEER_DATA_OUT register
-	uint32_t peer_data_in_;      ///< PEER_DATA_IN register
+	uint32_t operand_a_;      ///< OPERAND_A register
+	uint32_t operand_b_;      ///< OPERAND_B register
+	uint32_t operation_;      ///< OPERATION register
+	uint32_t result_;         ///< RESULT register
+	uint32_t status_;         ///< STATUS register
+	uint32_t control_;        ///< CONTROL register
+	uint32_t peer_data_out_;  ///< PEER_DATA_OUT register
+	uint32_t peer_data_in_;   ///< PEER_DATA_IN register
 
 	// Computation state
 	bool     compute_pending_;         ///< Computation in progress
@@ -266,10 +264,10 @@ private:
 	uint64_t pending_req_id_;          ///< Request ID of pending operation
 
 	// Statistics
-	uint64_t total_loads_;        ///< Total load operations
-	uint64_t total_stores_;       ///< Total store operations
-	uint64_t total_computations_; ///< Total computations performed
-	uint64_t total_peer_msgs_;    ///< Total peer messages sent
+	uint64_t total_loads_;         ///< Total load operations
+	uint64_t total_stores_;        ///< Total store operations
+	uint64_t total_computations_;  ///< Total computations performed
+	uint64_t total_peer_msgs_;     ///< Total peer messages sent
 };
 
 }  // namespace QEMUIntegration

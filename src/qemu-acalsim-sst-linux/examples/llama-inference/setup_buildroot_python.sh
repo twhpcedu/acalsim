@@ -39,8 +39,8 @@ echo ""
 read -p "Continue? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted"
-    exit 1
+	echo "Aborted"
+	exit 1
 fi
 
 # Configuration
@@ -60,19 +60,29 @@ mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
 if [ -f "buildroot-${BUILDROOT_VERSION}.tar.gz" ]; then
-    echo -e "${YELLOW}⚠${NC}  Buildroot tarball already exists, skipping download"
+	echo -e "${YELLOW}⚠${NC}  Buildroot tarball already exists, skipping download"
 else
-    echo "Downloading Buildroot ${BUILDROOT_VERSION}..."
-    wget -q --show-progress "$BUILDROOT_URL"
-    echo -e "${GREEN}✓${NC} Downloaded"
+	echo "Downloading Buildroot ${BUILDROOT_VERSION}..."
+	wget -q --show-progress "$BUILDROOT_URL"
+	echo -e "${GREEN}✓${NC} Downloaded"
 fi
 
 if [ -d "$BUILDROOT_DIR" ]; then
-    echo -e "${YELLOW}⚠${NC}  Buildroot directory exists, skipping extraction"
+	echo -e "${YELLOW}⚠${NC}  Buildroot directory exists"
+	read -p "Clean and rebuild with new config? (y/N) " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		cd "$BUILDROOT_DIR"
+		echo "Cleaning previous build..."
+		make clean
+		cd "$WORK_DIR"
+	else
+		echo "Keeping existing build, will update config only"
+	fi
 else
-    echo "Extracting..."
-    tar -xzf "buildroot-${BUILDROOT_VERSION}.tar.gz"
-    echo -e "${GREEN}✓${NC} Extracted"
+	echo "Extracting..."
+	tar -xzf "buildroot-${BUILDROOT_VERSION}.tar.gz"
+	echo -e "${GREEN}✓${NC} Extracted"
 fi
 
 cd "$BUILDROOT_DIR"
@@ -84,7 +94,7 @@ echo "============================================================"
 echo ""
 
 # Create custom defconfig
-cat > configs/acalsim_riscv64_defconfig << 'EOF'
+cat >configs/acalsim_riscv64_defconfig <<'EOF'
 # ACAL Simulator RISC-V 64-bit Configuration with Python 3
 
 # Target Architecture
@@ -133,6 +143,20 @@ BR2_PACKAGE_PYTHON3_SQLITE=y
 BR2_PACKAGE_PYTHON3_ZLIB=y
 BR2_PACKAGE_PYTHON3_PYEXPAT=y
 BR2_PACKAGE_PYTHON3_CURSES=y
+
+# Development tools (for building PyTorch from source)
+# Use Clang/LLVM instead of GCC for better RISC-V support
+BR2_PACKAGE_LLVM=y
+BR2_PACKAGE_CLANG=y
+BR2_PACKAGE_BINUTILS=y
+BR2_PACKAGE_MAKE=y
+BR2_PACKAGE_CMAKE=y
+BR2_PACKAGE_GIT=y
+BR2_PACKAGE_PATCH=y
+BR2_PACKAGE_DIFFUTILS=y
+
+# Text editors
+BR2_PACKAGE_VIM=y
 
 # Compression and archiving
 BR2_PACKAGE_BZIP2=y
@@ -184,6 +208,8 @@ echo "  Architecture: RISC-V 64-bit (RV64GC)"
 echo "  ABI: lp64d"
 echo "  C Library: glibc"
 echo "  Python: 3.x with pip, setuptools, numpy"
+echo "  Compiler: Clang/LLVM (better RISC-V support than GCC)"
+echo "  Dev Tools: cmake, git, vim, make, binutils"
 echo "  Init: BusyBox"
 echo "  Networking: DHCP, Dropbear SSH, wget"
 echo "  Tools: htop, tar, gzip, e2fsprogs"
@@ -202,11 +228,11 @@ echo ""
 read -p "Start build now? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "Build not started. To build manually later:"
-    echo "  cd $BUILDROOT_DIR"
-    echo "  make -j\$(nproc)"
-    exit 0
+	echo ""
+	echo "Build not started. To build manually later:"
+	echo "  cd $BUILDROOT_DIR"
+	echo "  make -j\$(nproc)"
+	exit 0
 fi
 
 # Start build
@@ -214,16 +240,38 @@ echo ""
 echo "Starting build at $(date)..."
 echo ""
 
-make -j$(nproc) 2>&1 | tee buildroot_build.log
+# Install build dependencies
+echo "Checking build dependencies..."
+if ! command -v rsync &>/dev/null; then
+	echo "Installing rsync..."
+	sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+fi
+echo -e "${GREEN}✓${NC} Build dependencies ready"
+echo ""
 
-if [ $? -eq 0 ]; then
-    echo ""
-    echo -e "${GREEN}✓${NC} Build completed successfully at $(date)"
+# Clean environment for Buildroot (it doesn't like LD_LIBRARY_PATH pollution)
+echo "Cleaning environment variables..."
+unset LD_LIBRARY_PATH
+unset PKG_CONFIG_PATH
+
+# Use PIPESTATUS to capture make exit code, not tee
+set -o pipefail
+env -i \
+	HOME="$HOME" \
+	PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+	TERM="$TERM" \
+	make -j$(nproc) 2>&1 | tee buildroot_build.log
+BUILD_RESULT=$?
+set +o pipefail
+
+if [ $BUILD_RESULT -eq 0 ]; then
+	echo ""
+	echo -e "${GREEN}✓${NC} Build completed successfully at $(date)"
 else
-    echo ""
-    echo -e "${RED}✗${NC} Build failed"
-    echo "Check log: $BUILDROOT_DIR/buildroot_build.log"
-    exit 1
+	echo ""
+	echo -e "${RED}✗${NC} Build failed with exit code $BUILD_RESULT"
+	echo "Check log: $BUILDROOT_DIR/buildroot_build.log"
+	exit 1
 fi
 
 echo ""
@@ -237,25 +285,25 @@ ROOTFS_TAR="$OUTPUT_DIR/images/rootfs.tar"
 ROOTFS_EXTRACT="/home/user/rootfs-python"
 
 if [ ! -f "$ROOTFS_CPIO" ]; then
-    echo -e "${RED}✗${NC} Rootfs not found: $ROOTFS_CPIO"
-    exit 1
+	echo -e "${RED}✗${NC} Rootfs not found: $ROOTFS_CPIO"
+	exit 1
 fi
 
 echo "Extracting rootfs..."
 mkdir -p "$ROOTFS_EXTRACT"
 cd "$ROOTFS_EXTRACT"
 
-gunzip -c "$ROOTFS_CPIO" | cpio -idmv > /dev/null 2>&1
+gunzip -c "$ROOTFS_CPIO" | cpio -idmv >/dev/null 2>&1
 
 echo -e "${GREEN}✓${NC} Rootfs extracted to $ROOTFS_EXTRACT"
 
 # Verify Python
 if [ -f "$ROOTFS_EXTRACT/usr/bin/python3" ]; then
-    echo -e "${GREEN}✓${NC} Python 3 found"
-    PYTHON_VERSION=$("$ROOTFS_EXTRACT/usr/bin/python3" --version 2>&1 || echo "unknown")
-    echo "  Version: $PYTHON_VERSION"
+	echo -e "${GREEN}✓${NC} Python 3 found"
+	PYTHON_VERSION=$("$ROOTFS_EXTRACT/usr/bin/python3" --version 2>&1 || echo "unknown")
+	echo "  Version: $PYTHON_VERSION"
 else
-    echo -e "${RED}✗${NC} Python 3 not found in rootfs"
+	echo -e "${RED}✗${NC} Python 3 not found in rootfs"
 fi
 
 # Check size
@@ -274,8 +322,8 @@ cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inferen
 echo "Creating persistent disk with Python-enabled rootfs..."
 
 ROOTFS_SOURCE="$ROOTFS_EXTRACT" \
-ROOTFS_DISK="/home/user/rootfs-python-persistent.qcow2" \
-./setup_persistent_simple.sh
+	ROOTFS_DISK="/home/user/rootfs-python-persistent.qcow2" \
+	./setup_persistent_simple.sh
 
 echo ""
 echo "============================================================"
@@ -288,11 +336,12 @@ echo "  ✓ Persistent disk: /home/user/rootfs-python-persistent.qcow2"
 echo "  ✓ Boot script: run_qemu_persistent.sh"
 echo ""
 echo "Rootfs includes:"
-echo "  - Python 3 with pip, setuptools"
-echo "  - NumPy"
+echo "  - Python 3 with pip, setuptools, NumPy"
+echo "  - Clang/LLVM compiler toolchain"
+echo "  - CMake, Git, Vim, Make, Binutils"
 echo "  - BusyBox utilities"
 echo "  - SSH server (Dropbear)"
-echo "  - Development tools"
+echo "  - Network support (DHCP, wget)"
 echo ""
 echo "Next steps:"
 echo "  1. Boot Linux: ./run_qemu_persistent.sh"

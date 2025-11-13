@@ -21,10 +21,20 @@
 using namespace ACALSim::QEMUIntegration;
 
 QEMUComponent::QEMUComponent(SST::ComponentId_t id, SST::Params& params)
-    : SST::Component(id), current_cycle_(0), next_req_id_(1), test_state_(TestState::IDLE), iteration_(0),
-      write_req_id_(0), read_req_id_(0), read_data_(0), status_data_(0), waiting_response_(false), total_loads_(0),
-      total_stores_(0), total_successes_(0), total_failures_(0) {
-
+    : SST::Component(id),
+      current_cycle_(0),
+      next_req_id_(1),
+      test_state_(TestState::IDLE),
+      iteration_(0),
+      write_req_id_(0),
+      read_req_id_(0),
+      read_data_(0),
+      status_data_(0),
+      waiting_response_(false),
+      total_loads_(0),
+      total_stores_(0),
+      total_successes_(0),
+      total_failures_(0) {
 	// Initialize output
 	int verbose = params.find<int>("verbose", 1);
 	out_.init("QEMU[@p:@l]: ", verbose, 0, SST::Output::STDOUT);
@@ -50,7 +60,7 @@ QEMUComponent::QEMUComponent(SST::ComponentId_t id, SST::Params& params)
 
 	// Configure link to device
 	device_link_ = configureLink("device_port",
-	                              new SST::Event::Handler<QEMUComponent>(this, &QEMUComponent::handleMemoryResponse));
+	                             new SST::Event::Handler<QEMUComponent>(this, &QEMUComponent::handleMemoryResponse));
 
 	if (!device_link_) { out_.fatal(CALL_INFO, -1, "Error: Failed to configure device_port link\\n"); }
 
@@ -103,12 +113,11 @@ bool QEMUComponent::clockTick(SST::Cycle_t cycle) {
 
 	// Clock handler return value: false = continue, true = done
 	bool is_done = (test_state_ == TestState::DONE);
-	out_.verbose(CALL_INFO, 1, 0, "[CLOCK] Returning %s (state=%d)\\n", is_done ? "true (DONE)" : "false (CONTINUE)", static_cast<int>(test_state_));
+	out_.verbose(CALL_INFO, 1, 0, "[CLOCK] Returning %s (state=%d)\\n", is_done ? "true (DONE)" : "false (CONTINUE)",
+	             static_cast<int>(test_state_));
 
 	// If test is done, tell SST this component is ready to end
-	if (is_done) {
-		primaryComponentOKToEndSim();
-	}
+	if (is_done) { primaryComponentOKToEndSim(); }
 
 	return is_done;  // true = unregister clock, false = keep ticking
 }
@@ -142,7 +151,7 @@ void QEMUComponent::processResponses() {
 			continue;
 		}
 
-		PendingTransaction& trans = it->second;
+		PendingTransaction& trans   = it->second;
 		uint64_t            latency = current_cycle_ - trans.issue_cycle;
 
 		out_.verbose(CALL_INFO, 2, 0, "Completed %s: addr=0x%lx latency=%lu cycles\\n",
@@ -170,87 +179,87 @@ void QEMUComponent::runTestProgram() {
 	if (waiting_response_) { return; }
 
 	switch (test_state_) {
-	case TestState::IDLE:
-		// Start first iteration
-		iteration_    = 0;
-		test_state_   = TestState::WRITE_DATA;
-		out_.verbose(CALL_INFO, 1, 0, "\\n=== Starting Test Iteration %u ===\\n", iteration_ + 1);
-		break;
-
-	case TestState::WRITE_DATA: {
-		// Write test pattern to device DATA_IN register
-		uint32_t pattern = test_pattern_ + iteration_;  // Vary pattern per iteration
-		out_.verbose(CALL_INFO, 1, 0, "Writing pattern 0x%x to DATA_IN\\n", pattern);
-		write_req_id_     = sendStore(device_base_ + REG_DATA_IN, pattern, 4);
-		waiting_response_ = true;
-		test_state_       = TestState::WAIT_BUSY;
-		break;
-	}
-
-	case TestState::WAIT_BUSY:
-		// Wait a few cycles for device to start processing
-		out_.verbose(CALL_INFO, 2, 0, "Waiting for device to process...\\n");
-		test_state_ = TestState::READ_STATUS;
-		break;
-
-	case TestState::READ_STATUS: {
-		// Read device STATUS register
-		out_.verbose(CALL_INFO, 2, 0, "Reading STATUS register\\n");
-		read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
-		waiting_response_ = true;
-		test_state_       = TestState::READ_DATA;
-		break;
-	}
-
-	case TestState::READ_DATA: {
-		// Check if device is ready
-		if (status_data_ & STATUS_BUSY) {
-			// Still busy, read status again
-			out_.verbose(CALL_INFO, 2, 0, "Device busy (status=0x%x), checking again\\n", status_data_);
-			read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
-			waiting_response_ = true;
-			// Stay in READ_DATA state
-		} else if (status_data_ & STATUS_DATA_READY) {
-			// Device ready, read DATA_OUT
-			out_.verbose(CALL_INFO, 2, 0, "Device ready, reading DATA_OUT\\n");
-			read_req_id_      = sendLoad(device_base_ + REG_DATA_OUT, 4);
-			waiting_response_ = true;
-			test_state_       = TestState::VERIFY;
-		} else {
-			// Read status again
-			read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
-			waiting_response_ = true;
-		}
-		break;
-	}
-
-	case TestState::VERIFY: {
-		// Verify read data matches written pattern
-		uint32_t expected = test_pattern_ + iteration_;
-		if (read_data_ == expected) {
-			out_.verbose(CALL_INFO, 1, 0, "✓ Test iteration %u PASSED (read=0x%x)\\n", iteration_ + 1, read_data_);
-			total_successes_++;
-		} else {
-			out_.verbose(CALL_INFO, 1, 0, "✗ Test iteration %u FAILED (expected=0x%x, read=0x%x)\\n", iteration_ + 1,
-			             expected, read_data_);
-			total_failures_++;
-		}
-
-		// Move to next iteration or finish
-		iteration_++;
-		if (iteration_ < num_iterations_) {
+		case TestState::IDLE:
+			// Start first iteration
+			iteration_  = 0;
 			test_state_ = TestState::WRITE_DATA;
 			out_.verbose(CALL_INFO, 1, 0, "\\n=== Starting Test Iteration %u ===\\n", iteration_ + 1);
-		} else {
-			out_.verbose(CALL_INFO, 1, 0, "\\n=== All Test Iterations Complete ===\\n");
-			test_state_ = TestState::DONE;
-		}
-		break;
-	}
+			break;
 
-	case TestState::DONE:
-		// Test complete, will stop simulation
-		break;
+		case TestState::WRITE_DATA: {
+			// Write test pattern to device DATA_IN register
+			uint32_t pattern = test_pattern_ + iteration_;  // Vary pattern per iteration
+			out_.verbose(CALL_INFO, 1, 0, "Writing pattern 0x%x to DATA_IN\\n", pattern);
+			write_req_id_     = sendStore(device_base_ + REG_DATA_IN, pattern, 4);
+			waiting_response_ = true;
+			test_state_       = TestState::WAIT_BUSY;
+			break;
+		}
+
+		case TestState::WAIT_BUSY:
+			// Wait a few cycles for device to start processing
+			out_.verbose(CALL_INFO, 2, 0, "Waiting for device to process...\\n");
+			test_state_ = TestState::READ_STATUS;
+			break;
+
+		case TestState::READ_STATUS: {
+			// Read device STATUS register
+			out_.verbose(CALL_INFO, 2, 0, "Reading STATUS register\\n");
+			read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
+			waiting_response_ = true;
+			test_state_       = TestState::READ_DATA;
+			break;
+		}
+
+		case TestState::READ_DATA: {
+			// Check if device is ready
+			if (status_data_ & STATUS_BUSY) {
+				// Still busy, read status again
+				out_.verbose(CALL_INFO, 2, 0, "Device busy (status=0x%x), checking again\\n", status_data_);
+				read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
+				waiting_response_ = true;
+				// Stay in READ_DATA state
+			} else if (status_data_ & STATUS_DATA_READY) {
+				// Device ready, read DATA_OUT
+				out_.verbose(CALL_INFO, 2, 0, "Device ready, reading DATA_OUT\\n");
+				read_req_id_      = sendLoad(device_base_ + REG_DATA_OUT, 4);
+				waiting_response_ = true;
+				test_state_       = TestState::VERIFY;
+			} else {
+				// Read status again
+				read_req_id_      = sendLoad(device_base_ + REG_STATUS, 4);
+				waiting_response_ = true;
+			}
+			break;
+		}
+
+		case TestState::VERIFY: {
+			// Verify read data matches written pattern
+			uint32_t expected = test_pattern_ + iteration_;
+			if (read_data_ == expected) {
+				out_.verbose(CALL_INFO, 1, 0, "✓ Test iteration %u PASSED (read=0x%x)\\n", iteration_ + 1, read_data_);
+				total_successes_++;
+			} else {
+				out_.verbose(CALL_INFO, 1, 0, "✗ Test iteration %u FAILED (expected=0x%x, read=0x%x)\\n",
+				             iteration_ + 1, expected, read_data_);
+				total_failures_++;
+			}
+
+			// Move to next iteration or finish
+			iteration_++;
+			if (iteration_ < num_iterations_) {
+				test_state_ = TestState::WRITE_DATA;
+				out_.verbose(CALL_INFO, 1, 0, "\\n=== Starting Test Iteration %u ===\\n", iteration_ + 1);
+			} else {
+				out_.verbose(CALL_INFO, 1, 0, "\\n=== All Test Iterations Complete ===\\n");
+				test_state_ = TestState::DONE;
+			}
+			break;
+		}
+
+		case TestState::DONE:
+			// Test complete, will stop simulation
+			break;
 	}
 }
 
@@ -265,11 +274,11 @@ uint64_t QEMUComponent::sendLoad(uint64_t addr, uint32_t size) {
 
 	// Track pending transaction
 	PendingTransaction pending;
-	pending.req_id      = req_id;
-	pending.type        = TransactionType::LOAD;
-	pending.address     = addr;
-	pending.data        = 0;
-	pending.issue_cycle = current_cycle_;
+	pending.req_id                = req_id;
+	pending.type                  = TransactionType::LOAD;
+	pending.address               = addr;
+	pending.data                  = 0;
+	pending.issue_cycle           = current_cycle_;
 	pending_transactions_[req_id] = pending;
 
 	total_loads_++;
@@ -288,11 +297,11 @@ uint64_t QEMUComponent::sendStore(uint64_t addr, uint32_t data, uint32_t size) {
 
 	// Track pending transaction
 	PendingTransaction pending;
-	pending.req_id      = req_id;
-	pending.type        = TransactionType::STORE;
-	pending.address     = addr;
-	pending.data        = data;
-	pending.issue_cycle = current_cycle_;
+	pending.req_id                = req_id;
+	pending.type                  = TransactionType::STORE;
+	pending.address               = addr;
+	pending.data                  = data;
+	pending.issue_cycle           = current_cycle_;
 	pending_transactions_[req_id] = pending;
 
 	total_stores_++;

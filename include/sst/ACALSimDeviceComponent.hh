@@ -18,8 +18,8 @@
 #define __ACALSIM_DEVICE_COMPONENT_HH__
 
 #include <sst/core/component.h>
-#include <sst/core/link.h>
 #include <sst/core/event.h>
+#include <sst/core/link.h>
 #include <sst/core/output.h>
 
 namespace ACALSim {
@@ -67,21 +67,21 @@ public:
 	// SST Event interface
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& type_;
-		ser& address_;
-		ser& data_;
-		ser& size_;
-		ser& req_id_;
+		ser & type_;
+		ser & address_;
+		ser & data_;
+		ser & size_;
+		ser & req_id_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::MemoryTransactionEvent);
 
 private:
-	TransactionType type_;      ///< LOAD or STORE
-	uint64_t        address_;   ///< Memory address
-	uint32_t        data_;      ///< Data (for stores)
-	uint32_t        size_;      ///< Size in bytes
-	uint64_t        req_id_;    ///< Request ID
+	TransactionType type_;     ///< LOAD or STORE
+	uint64_t        address_;  ///< Memory address
+	uint32_t        data_;     ///< Data (for stores)
+	uint32_t        size_;     ///< Size in bytes
+	uint64_t        req_id_;   ///< Request ID
 };
 
 /**
@@ -113,17 +113,17 @@ public:
 	// SST Event interface
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& req_id_;
-		ser& data_;
-		ser& success_;
+		ser & req_id_;
+		ser & data_;
+		ser & success_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::MemoryResponseEvent);
 
 private:
-	uint64_t req_id_;    ///< Request ID
-	uint32_t data_;      ///< Response data
-	bool     success_;   ///< Success status
+	uint64_t req_id_;   ///< Request ID
+	uint32_t data_;     ///< Response data
+	bool     success_;  ///< Success status
 };
 
 /**
@@ -146,8 +146,7 @@ public:
 	 * @brief SST ELI registration
 	 */
 	SST_ELI_REGISTER_COMPONENT(ACALSimDeviceComponent, "acalsim", "QEMUDevice", SST_ELI_ELEMENT_VERSION(1, 0, 0),
-	                           "ACALSim memory-mapped device for QEMU integration",
-	                           COMPONENT_CATEGORY_UNCATEGORIZED)
+	                           "ACALSim memory-mapped device for QEMU integration", COMPONENT_CATEGORY_UNCATEGORIZED)
 
 	/**
 	 * @brief Parameter documentation
@@ -246,21 +245,21 @@ private:
 	void resetDevice();
 
 	// SST infrastructure
-	SST::Output         out_;        ///< Output handler
-	SST::Link*          cpu_link_;   ///< Link to CPU (QEMU)
-	SST::TimeConverter* tc_;         ///< Time converter
+	SST::Output         out_;            ///< Output handler
+	SST::Link*          cpu_link_;       ///< Link to CPU (QEMU)
+	SST::TimeConverter* tc_;             ///< Time converter
 	SST::Cycle_t        current_cycle_;  ///< Current cycle
 
 	// Device configuration
-	uint64_t base_addr_;      ///< Base address in memory map
-	uint64_t size_;           ///< Device memory size
-	uint64_t echo_latency_;   ///< Echo operation latency
+	uint64_t base_addr_;     ///< Base address in memory map
+	uint64_t size_;          ///< Device memory size
+	uint64_t echo_latency_;  ///< Echo operation latency
 
 	// Device state
-	uint32_t data_in_;        ///< DATA_IN register value
-	uint32_t data_out_;       ///< DATA_OUT register value
-	uint32_t status_;         ///< STATUS register value
-	uint32_t control_;        ///< CONTROL register value
+	uint32_t data_in_;   ///< DATA_IN register value
+	uint32_t data_out_;  ///< DATA_OUT register value
+	uint32_t status_;    ///< STATUS register value
+	uint32_t control_;   ///< CONTROL register value
 
 	// Echo operation state
 	bool     echo_pending_;         ///< Echo operation in progress
@@ -268,9 +267,9 @@ private:
 	uint64_t pending_req_id_;       ///< Request ID of pending operation
 
 	// Statistics
-	uint64_t total_loads_;     ///< Total load operations
-	uint64_t total_stores_;    ///< Total store operations
-	uint64_t total_echos_;     ///< Total echo operations
+	uint64_t total_loads_;   ///< Total load operations
+	uint64_t total_stores_;  ///< Total store operations
+	uint64_t total_echos_;   ///< Total echo operations
 };
 
 }  // namespace QEMUIntegration

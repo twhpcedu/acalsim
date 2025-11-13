@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 QEMU-Real SST Integration Test Configuration
 
@@ -39,8 +38,9 @@ import os
 # -----------------------------------------------------------------------------
 
 # Get RISC-V binary path from environment or use default
-binary_path = os.environ.get("RISCV_BINARY",
-    "/home/user/projects/acalsim/src/qemu-sst/riscv-programs/sst_device_test.elf")
+binary_path = os.environ.get(
+    "RISCV_BINARY", "/home/user/projects/acalsim/src/qemu-sst/riscv-programs/sst_device_test.elf"
+)
 
 # QEMU path
 qemu_path = os.environ.get("QEMU_PATH", "qemu-system-riscv32")
@@ -79,10 +79,10 @@ print()
 
 qemu = sst.Component("qemu0", "qemureal.QEMUReal")
 qemu.addParams({
-    "clock":       "1GHz",
-    "verbose":     "2",
+    "clock": "1GHz",
+    "verbose": "2",
     "binary_path": binary_path,
-    "qemu_path":   qemu_path,
+    "qemu_path": qemu_path,
     "socket_path": socket_path,
 })
 
@@ -92,10 +92,10 @@ qemu.addParams({
 
 device = sst.Component("device0", "acalsim.QEMUDevice")
 device.addParams({
-    "clock":        "1GHz",
-    "base_addr":    str(device_base),
-    "size":         "4096",
-    "verbose":      "1",  # Reduce verbosity for cleaner output
+    "clock": "1GHz",
+    "base_addr": str(device_base),
+    "size": "4096",
+    "verbose": "1",  # Reduce verbosity for cleaner output
     "echo_latency": "1",  # 1 cycle (minimal latency for testing)
 })
 
@@ -105,10 +105,7 @@ device.addParams({
 
 # Link between QEMU and device
 qemu_device_link = sst.Link("qemu_device_link")
-qemu_device_link.connect(
-    (qemu, "device_port", "1ns"),
-    (device, "cpu_port", "1ns")
-)
+qemu_device_link.connect((qemu, "device_port", "1ns"), (device, "cpu_port", "1ns"))
 
 # -----------------------------------------------------------------------------
 # Statistics

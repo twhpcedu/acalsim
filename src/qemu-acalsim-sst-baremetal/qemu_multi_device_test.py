@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 QEMU Multi-Device SST Integration Test Configuration
 
@@ -63,8 +62,10 @@ import os
 # -----------------------------------------------------------------------------
 
 # Get RISC-V binary path
-binary_path = os.environ.get("RISCV_BINARY",
-    "/home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/multi_device_test.elf")
+binary_path = os.environ.get(
+    "RISCV_BINARY",
+    "/home/user/projects/acalsim/src/qemu-acalsim-sst-baremetal/riscv-programs/multi_device_test.elf"
+)
 
 # QEMU path
 qemu_path = os.environ.get("QEMU_PATH", "/home/user/qemu-build/install/bin/qemu-system-riscv32")
@@ -116,10 +117,10 @@ print()
 
 qemu = sst.Component("qemu0", "qemubinary.QEMUBinary")
 qemu.addParams({
-    "clock":       "1GHz",
-    "verbose":     "2",
+    "clock": "1GHz",
+    "verbose": "2",
     "binary_path": binary_path,
-    "qemu_path":   qemu_path,
+    "qemu_path": qemu_path,
     "socket_path": socket_path,
     "device_base": f"0x{echo_device_base:08X}",  # Base for routing
 })
@@ -130,10 +131,10 @@ qemu.addParams({
 
 echo_dev = sst.Component("echo_dev", "acalsim.QEMUDevice")
 echo_dev.addParams({
-    "clock":        "1GHz",
-    "base_addr":    str(echo_device_base),
-    "size":         "4096",
-    "verbose":      "2",
+    "clock": "1GHz",
+    "base_addr": str(echo_device_base),
+    "size": "4096",
+    "verbose": "2",
     "echo_latency": "10",  # 10 cycles
 })
 
@@ -143,10 +144,10 @@ echo_dev.addParams({
 
 compute_dev = sst.Component("compute_dev", "acalsim.ComputeDevice")
 compute_dev.addParams({
-    "clock":          "1GHz",
-    "base_addr":      str(compute_device_base),
-    "size":           "4096",
-    "verbose":        "2",
+    "clock": "1GHz",
+    "base_addr": str(compute_device_base),
+    "size": "4096",
+    "verbose": "2",
     "compute_latency": "100",  # 100 cycles for computation
 })
 
@@ -158,10 +159,7 @@ compute_dev.addParams({
 # In this simplified configuration, all QEMU transactions go through echo device
 # The echo device will handle its own addresses (0x10200000-0x10200FFF)
 qemu_echo_link = sst.Link("qemu_echo_link")
-qemu_echo_link.connect(
-    (qemu, "device_port", "1ns"),
-    (echo_dev, "cpu_port", "1ns")
-)
+qemu_echo_link.connect((qemu, "device_port", "1ns"), (echo_dev, "cpu_port", "1ns"))
 
 # For proper multi-device support, we would need:
 # - Modified QEMUBinaryComponent with device1_port and device2_port
@@ -172,7 +170,7 @@ qemu_echo_link.connect(
 # This allows devices to exchange data directly
 device_peer_link = sst.Link("device_peer_link")
 device_peer_link.connect(
-    (echo_dev, "peer_port", "10ns"),    # Echo device peer port
+    (echo_dev, "peer_port", "10ns"),  # Echo device peer port
     (compute_dev, "peer_port", "10ns")  # Compute device peer port
 )
 

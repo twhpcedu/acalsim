@@ -21,11 +21,11 @@
 #include <sst/core/event.h>
 #include <sst/core/link.h>
 #include <sst/core/output.h>
+#include <sys/types.h>
 
 #include <map>
 #include <queue>
 #include <string>
-#include <sys/types.h>
 
 // Include event definitions from ACALSim device
 #include "../acalsim-device/ACALSimDeviceComponent.hh"
@@ -34,26 +34,26 @@ namespace ACALSim {
 namespace QEMUReal {
 
 // Re-use the event classes and transaction types from QEMUIntegration
-using ACALSim::QEMUIntegration::MemoryTransactionEvent;
 using ACALSim::QEMUIntegration::MemoryResponseEvent;
+using ACALSim::QEMUIntegration::MemoryTransactionEvent;
 using ACALSim::QEMUIntegration::TransactionType;
 
 // QEMU state
 enum class QEMUState {
-    IDLE,           // Not started
-    LAUNCHING,      // Starting QEMU process
-    RUNNING,        // QEMU running, monitoring serial
-    WAITING_DEVICE, // Waiting for SST device response
-    COMPLETED,      // QEMU exited successfully
-    ERROR           // Error occurred
+	IDLE,            // Not started
+	LAUNCHING,       // Starting QEMU process
+	RUNNING,         // QEMU running, monitoring serial
+	WAITING_DEVICE,  // Waiting for SST device response
+	COMPLETED,       // QEMU exited successfully
+	ERROR            // Error occurred
 };
 
 // Pending QEMU request (waiting for SST device response)
 struct PendingQEMURequest {
-    std::string command;  // Original SST protocol command
-    uint64_t sst_req_id;  // SST request ID
-    uint64_t address;
-    TransactionType type;
+	std::string     command;     // Original SST protocol command
+	uint64_t        sst_req_id;  // SST request ID
+	uint64_t        address;
+	TransactionType type;
 };
 
 /*
@@ -71,95 +71,89 @@ struct PendingQEMURequest {
  */
 class QEMURealComponent : public SST::Component {
 public:
-    // SST registration macro
-    SST_ELI_REGISTER_COMPONENT(
-        QEMURealComponent,
-        "qemureal",
-        "QEMUReal",
-        SST_ELI_ELEMENT_VERSION(1, 0, 0),
-        "QEMU Real Component - Runs actual QEMU process with RISC-V binary",
-        COMPONENT_CATEGORY_PROCESSOR)
+	// SST registration macro
+	SST_ELI_REGISTER_COMPONENT(QEMURealComponent, "qemureal", "QEMUReal", SST_ELI_ELEMENT_VERSION(1, 0, 0),
+	                           "QEMU Real Component - Runs actual QEMU process with RISC-V binary",
+	                           COMPONENT_CATEGORY_PROCESSOR)
 
-    // Parameter documentation
-    SST_ELI_DOCUMENT_PARAMS(
-        {"clock", "Clock frequency", "1GHz"},
-        {"verbose", "Verbosity level (0-3)", "1"},
-        {"binary_path", "Path to RISC-V ELF binary", ""},
-        {"qemu_path", "Path to qemu-system-riscv32", "qemu-system-riscv32"},
-        {"socket_path", "Path to Unix socket for serial", "/tmp/qemu-sst.sock"})
+	// Parameter documentation
+	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"}, {"verbose", "Verbosity level (0-3)", "1"},
+	                        {"binary_path", "Path to RISC-V ELF binary", ""},
+	                        {"qemu_path", "Path to qemu-system-riscv32", "qemu-system-riscv32"},
+	                        {"socket_path", "Path to Unix socket for serial", "/tmp/qemu-sst.sock"})
 
-    // Port documentation
-    SST_ELI_DOCUMENT_PORTS({"device_port", "Port to memory/device subsystem", {"MemoryTransactionEvent"}})
+	// Port documentation
+	SST_ELI_DOCUMENT_PORTS({"device_port", "Port to memory/device subsystem", {"MemoryTransactionEvent"}})
 
-    // Constructor and destructor
-    QEMURealComponent(SST::ComponentId_t id, SST::Params& params);
-    ~QEMURealComponent();
+	// Constructor and destructor
+	QEMURealComponent(SST::ComponentId_t id, SST::Params& params);
+	~QEMURealComponent();
 
-    // SST lifecycle methods
-    void setup() override;
-    void finish() override;
+	// SST lifecycle methods
+	void setup() override;
+	void finish() override;
 
 private:
-    // Clock handler
-    bool clockTick(SST::Cycle_t cycle);
+	// Clock handler
+	bool clockTick(SST::Cycle_t cycle);
 
-    // Event handlers
-    void handleDeviceResponse(SST::Event* ev);
+	// Event handlers
+	void handleDeviceResponse(SST::Event* ev);
 
-    // QEMU process management
-    void launchQEMU();
-    void monitorQEMU();
-    void terminateQEMU();
-    bool isQEMURunning();
+	// QEMU process management
+	void launchQEMU();
+	void monitorQEMU();
+	void terminateQEMU();
+	bool isQEMURunning();
 
-    // Serial communication
-    void setupSerial();
-    void handleSerialData();
-    void sendSerialResponse(const std::string& response);
+	// Serial communication
+	void setupSerial();
+	void handleSerialData();
+	void sendSerialResponse(const std::string& response);
 
-    // Protocol parsing
-    void parseCommand(const std::string& line);
-    bool parseSSTCommand(const std::string& cmd, std::string& operation, uint64_t& addr, uint32_t& data);
+	// Protocol parsing
+	void parseCommand(const std::string& line);
+	bool parseSSTCommand(const std::string& cmd, std::string& operation, uint64_t& addr, uint32_t& data);
 
-    // SST device communication
-    void sendDeviceRequest(TransactionType type, uint64_t addr, uint32_t data);
+	// SST device communication
+	void sendDeviceRequest(TransactionType type, uint64_t addr, uint32_t data);
 
-    // State management
-    void setState(QEMUState new_state);
+	// State management
+	void setState(QEMUState new_state);
 
-    // Member variables - Output
-    SST::Output out_;
+	// Member variables - Output
+	SST::Output out_;
 
-    // Member variables - Timing
-    SST::Cycle_t current_cycle_;
-    SST::TimeConverter* tc_;
+	// Member variables - Timing
+	SST::Cycle_t        current_cycle_;
+	SST::TimeConverter* tc_;
 
-    // Member variables - QEMU process
-    pid_t qemu_pid_;
-    std::string binary_path_;
-    std::string qemu_path_;
-    std::string socket_path_;
-    QEMUState state_;
+	// Member variables - QEMU process
+	pid_t       qemu_pid_;
+	std::string binary_path_;
+	std::string qemu_path_;
+	std::string socket_path_;
+	QEMUState   state_;
 
-    // Member variables - Serial communication
-    int serial_fd_;
-    std::string serial_buffer_;
-    bool serial_ready_;
+	// Member variables - Serial communication
+	int         serial_fd_;
+	std::string serial_buffer_;
+	bool        serial_ready_;
 
-    // Member variables - SST communication
-    SST::Link* device_link_;
-    std::map<uint64_t, PendingQEMURequest> pending_requests_;
-    uint64_t next_req_id_;
+	// Member variables - SST communication
+	SST::Link*                             device_link_;
+	std::map<uint64_t, PendingQEMURequest> pending_requests_;
+	uint64_t                               next_req_id_;
 
-    // Member variables - Statistics
-    uint64_t total_commands_;
-    uint64_t total_writes_;
-    uint64_t total_reads_;
-    uint64_t successful_transactions_;
-    uint64_t failed_transactions_;
+	// Member variables - Statistics
+	uint64_t total_commands_;
+	uint64_t total_writes_;
+	uint64_t total_reads_;
+	uint64_t successful_transactions_;
+	uint64_t failed_transactions_;
 };
 
-} // namespace QEMUReal
-} // namespace ACALSim
+}  // namespace QEMUReal
+}  // namespace ACALSim
 
-#endif // QEMU_REAL_COMPONENT_HH
+#endif  // QEMU_REAL_COMPONENT_HH

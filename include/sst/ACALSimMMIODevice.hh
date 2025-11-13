@@ -17,13 +17,15 @@
 #ifndef __ACALSIM_MMIO_DEVICE_HH__
 #define __ACALSIM_MMIO_DEVICE_HH__
 
-#include "sst/ACALSimDeviceComponent.hh"
-#include <queue>
 #include <sst/core/component.h>
 #include <sst/core/event.h>
 #include <sst/core/link.h>
 #include <sst/core/output.h>
 #include <sst/core/statapi/statbase.h>
+
+#include <queue>
+
+#include "sst/ACALSimDeviceComponent.hh"
 
 namespace ACALSim {
 namespace QEMUIntegration {
@@ -65,8 +67,8 @@ public:
 	// SST Event interface
 	void serialize_order(SST::Core::Serialization::serializer& ser) override {
 		Event::serialize_order(ser);
-		ser& irq_num_;
-		ser& type_;
+		ser & irq_num_;
+		ser & type_;
 	}
 
 	ImplementSerializable(ACALSim::QEMUIntegration::InterruptEvent);
@@ -138,18 +140,18 @@ public:
 	static constexpr uint64_t REG_CYCLE_COUNT = 0x28;
 
 	// Control register bits
-	static constexpr uint32_t CTRL_START     = (1 << 0);
-	static constexpr uint32_t CTRL_RESET     = (1 << 1);
-	static constexpr uint32_t CTRL_INT_EN    = (1 << 2);
+	static constexpr uint32_t CTRL_START  = (1 << 0);
+	static constexpr uint32_t CTRL_RESET  = (1 << 1);
+	static constexpr uint32_t CTRL_INT_EN = (1 << 2);
 
 	// Status register bits
-	static constexpr uint32_t STATUS_BUSY    = (1 << 0);
-	static constexpr uint32_t STATUS_DONE    = (1 << 1);
-	static constexpr uint32_t STATUS_ERROR   = (1 << 2);
+	static constexpr uint32_t STATUS_BUSY  = (1 << 0);
+	static constexpr uint32_t STATUS_DONE  = (1 << 1);
+	static constexpr uint32_t STATUS_ERROR = (1 << 2);
 
 	// Interrupt bits
-	static constexpr uint32_t INT_COMPLETE   = (1 << 0);
-	static constexpr uint32_t INT_ERROR      = (1 << 1);
+	static constexpr uint32_t INT_COMPLETE = (1 << 0);
+	static constexpr uint32_t INT_ERROR    = (1 << 1);
 
 	/**
 	 * @brief SST ELI registration
@@ -160,10 +162,8 @@ public:
 	/**
 	 * @brief Parameter documentation
 	 */
-	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"},
-	                        {"base_addr", "Device base address", "0x10001000"},
-	                        {"size", "Device memory size", "4096"},
-	                        {"verbose", "Verbosity level (0-3)", "1"},
+	SST_ELI_DOCUMENT_PARAMS({"clock", "Clock frequency", "1GHz"}, {"base_addr", "Device base address", "0x10001000"},
+	                        {"size", "Device memory size", "4096"}, {"verbose", "Verbosity level (0-3)", "1"},
 	                        {"default_latency", "Default operation latency in cycles", "100"},
 	                        {"irq_num", "IRQ number for this device", "1"})
 
@@ -271,9 +271,9 @@ private:
 	void updateInterruptLine();
 
 	// SST infrastructure
-	SST::Output output_;          ///< Output handler for logging
-	SST::Link*  cpu_link_;        ///< Link to CPU (QEMU)
-	SST::Link*  irq_link_;        ///< Link for interrupt signaling
+	SST::Output output_;    ///< Output handler for logging
+	SST::Link*  cpu_link_;  ///< Link to CPU (QEMU)
+	SST::Link*  irq_link_;  ///< Link for interrupt signaling
 
 	// Statistics
 	SST::Statistics::Statistic<uint64_t>* stat_mmio_reads_;
@@ -283,29 +283,29 @@ private:
 	SST::Statistics::Statistic<uint64_t>* stat_avg_latency_;
 
 	// Device configuration
-	uint64_t base_addr_;          ///< Base address
-	uint64_t size_;               ///< Memory size
-	uint32_t verbose_;            ///< Verbosity level
-	uint32_t irq_num_;            ///< IRQ number
+	uint64_t base_addr_;  ///< Base address
+	uint64_t size_;       ///< Memory size
+	uint32_t verbose_;    ///< Verbosity level
+	uint32_t irq_num_;    ///< IRQ number
 
 	// Device registers
-	uint32_t reg_ctrl_;           ///< Control register
-	uint32_t reg_status_;         ///< Status register
-	uint32_t reg_int_status_;     ///< Interrupt status
-	uint32_t reg_int_enable_;     ///< Interrupt enable
-	uint32_t reg_src_addr_;       ///< Source address
-	uint32_t reg_dst_addr_;       ///< Destination address
-	uint32_t reg_length_;         ///< Transfer length
-	uint32_t reg_latency_;        ///< Operation latency
-	uint32_t reg_data_in_;        ///< Data input
-	uint32_t reg_data_out_;       ///< Data output
+	uint32_t reg_ctrl_;        ///< Control register
+	uint32_t reg_status_;      ///< Status register
+	uint32_t reg_int_status_;  ///< Interrupt status
+	uint32_t reg_int_enable_;  ///< Interrupt enable
+	uint32_t reg_src_addr_;    ///< Source address
+	uint32_t reg_dst_addr_;    ///< Destination address
+	uint32_t reg_length_;      ///< Transfer length
+	uint32_t reg_latency_;     ///< Operation latency
+	uint32_t reg_data_in_;     ///< Data input
+	uint32_t reg_data_out_;    ///< Data output
 
 	// Device state
-	Operation    current_op_;     ///< Current operation
-	uint64_t     cycle_count_;    ///< Cycle counter
-	bool         irq_asserted_;   ///< IRQ line state
-	uint64_t     total_ops_;      ///< Total operations
-	uint64_t     total_latency_;  ///< Total latency for stats
+	Operation current_op_;     ///< Current operation
+	uint64_t  cycle_count_;    ///< Cycle counter
+	bool      irq_asserted_;   ///< IRQ line state
+	uint64_t  total_ops_;      ///< Total operations
+	uint64_t  total_latency_;  ///< Total latency for stats
 };
 
 }  // namespace QEMUIntegration

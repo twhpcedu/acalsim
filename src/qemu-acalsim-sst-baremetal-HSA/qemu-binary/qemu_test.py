@@ -1,3 +1,17 @@
+# Copyright 2023-2025 Playlab/ACAL
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python3
 """
 SST Multi-Device Configuration
@@ -61,31 +75,19 @@ compute_device2.addParams({"compute_latency": 50})
 # Links between QEMU and devices
 # Link 0: QEMU <-> echo_device
 link0 = sst.Link("link_0")
-link0.connect(
-    (qemu, "device_port_0", "1ns"),
-    (echo_device, "cpu_port", "1ns")
-)
+link0.connect((qemu, "device_port_0", "1ns"), (echo_device, "cpu_port", "1ns"))
 
 # Link 1: QEMU <-> compute_device
 link1 = sst.Link("link_1")
-link1.connect(
-    (qemu, "device_port_1", "1ns"),
-    (compute_device, "cpu_port", "1ns")
-)
+link1.connect((qemu, "device_port_1", "1ns"), (compute_device, "cpu_port", "1ns"))
 
 # Link 2: QEMU <-> echo_device2
 link2 = sst.Link("link_2")
-link2.connect(
-    (qemu, "device_port_2", "1ns"),
-    (echo_device2, "cpu_port", "1ns")
-)
+link2.connect((qemu, "device_port_2", "1ns"), (echo_device2, "cpu_port", "1ns"))
 
 # Link 3: QEMU <-> compute_device2
 link3 = sst.Link("link_3")
-link3.connect(
-    (qemu, "device_port_3", "1ns"),
-    (compute_device2, "cpu_port", "1ns")
-)
+link3.connect((qemu, "device_port_3", "1ns"), (compute_device2, "cpu_port", "1ns"))
 
 # Simulation parameters
 sst.setProgramOption("stop-at", "100ms")

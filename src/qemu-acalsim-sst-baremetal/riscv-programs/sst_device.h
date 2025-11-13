@@ -28,8 +28,8 @@
 #ifndef SST_DEVICE_H
 #define SST_DEVICE_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // SST device base address
 #define SST_DEVICE_BASE 0x20000000
@@ -45,16 +45,16 @@
 
 // UART base for QEMU virt machine
 #define UART_BASE 0x10000000
-static volatile unsigned char *uart = (unsigned char *)UART_BASE;
+static volatile unsigned char* uart = (unsigned char*)UART_BASE;
 
 // Forward declarations
-void uart_putc(char c);
-void uart_puts(const char *s);
-void uart_printf(const char *format, ...);
-char uart_getc(void);
-void uart_gets(char *buffer, int size);
-uint32_t parse_hex(const char *str);
-void format_hex(char *buffer, uint32_t value);
+void     uart_putc(char c);
+void     uart_puts(const char* s);
+void     uart_printf(const char* format, ...);
+char     uart_getc(void);
+void     uart_gets(char* buffer, int size);
+uint32_t parse_hex(const char* str);
+void     format_hex(char* buffer, uint32_t value);
 
 /*
  * Write to SST device register
@@ -64,23 +64,23 @@ void format_hex(char *buffer, uint32_t value);
  * @return true if successful, false on error
  */
 static inline bool sst_write(uint32_t addr, uint32_t data) {
-    char buffer[64];
+	char buffer[64];
 
-    // Send write command: SST:WRITE:ADDR:DATA\n
-    uart_puts("SST:WRITE:");
-    format_hex(buffer, addr);
-    uart_puts(buffer);
-    uart_putc(':');
-    format_hex(buffer, data);
-    uart_puts(buffer);
-    uart_putc('\n');
+	// Send write command: SST:WRITE:ADDR:DATA\n
+	uart_puts("SST:WRITE:");
+	format_hex(buffer, addr);
+	uart_puts(buffer);
+	uart_putc(':');
+	format_hex(buffer, data);
+	uart_puts(buffer);
+	uart_putc('\n');
 
-    // Wait for response
-    uart_gets(buffer, sizeof(buffer));
+	// Wait for response
+	uart_gets(buffer, sizeof(buffer));
 
-    // Check for SST:OK
-    return (buffer[0] == 'S' && buffer[1] == 'S' && buffer[2] == 'T' &&
-            buffer[3] == ':' && buffer[4] == 'O' && buffer[5] == 'K');
+	// Check for SST:OK
+	return (buffer[0] == 'S' && buffer[1] == 'S' && buffer[2] == 'T' && buffer[3] == ':' && buffer[4] == 'O' &&
+	        buffer[5] == 'K');
 }
 
 /*
@@ -90,28 +90,27 @@ static inline bool sst_write(uint32_t addr, uint32_t data) {
  * @param data Pointer to store read data
  * @return true if successful, false on error
  */
-static inline bool sst_read(uint32_t addr, uint32_t *data) {
-    char buffer[64];
+static inline bool sst_read(uint32_t addr, uint32_t* data) {
+	char buffer[64];
 
-    // Send read command: SST:READ:ADDR:00000000\n
-    uart_puts("SST:READ:");
-    format_hex(buffer, addr);
-    uart_puts(buffer);
-    uart_puts(":00000000\n");
+	// Send read command: SST:READ:ADDR:00000000\n
+	uart_puts("SST:READ:");
+	format_hex(buffer, addr);
+	uart_puts(buffer);
+	uart_puts(":00000000\n");
 
-    // Wait for response
-    uart_gets(buffer, sizeof(buffer));
+	// Wait for response
+	uart_gets(buffer, sizeof(buffer));
 
-    // Check for SST:OK:
-    if (!(buffer[0] == 'S' && buffer[1] == 'S' && buffer[2] == 'T' &&
-          buffer[3] == ':' && buffer[4] == 'O' && buffer[5] == 'K' &&
-          buffer[6] == ':')) {
-        return false;
-    }
+	// Check for SST:OK:
+	if (!(buffer[0] == 'S' && buffer[1] == 'S' && buffer[2] == 'T' && buffer[3] == ':' && buffer[4] == 'O' &&
+	      buffer[5] == 'K' && buffer[6] == ':')) {
+		return false;
+	}
 
-    // Parse hex data after SST:OK:
-    *data = parse_hex(&buffer[7]);
-    return true;
+	// Parse hex data after SST:OK:
+	*data = parse_hex(&buffer[7]);
+	return true;
 }
 
 /*
@@ -120,20 +119,16 @@ static inline bool sst_read(uint32_t addr, uint32_t *data) {
  * @return true if device ready, false on timeout
  */
 static inline bool sst_wait_ready(void) {
-    uint32_t status;
-    int timeout = 10000;
+	uint32_t status;
+	int      timeout = 10000;
 
-    while (timeout-- > 0) {
-        if (!sst_read(SST_STATUS, &status)) {
-            return false;
-        }
+	while (timeout-- > 0) {
+		if (!sst_read(SST_STATUS, &status)) { return false; }
 
-        if (!(status & SST_STATUS_BUSY)) {
-            return true;
-        }
-    }
+		if (!(status & SST_STATUS_BUSY)) { return true; }
+	}
 
-    return false;  // Timeout
+	return false;  // Timeout
 }
 
 /*
@@ -142,13 +137,11 @@ static inline bool sst_wait_ready(void) {
  * @return true if data ready, false otherwise
  */
 static inline bool sst_data_ready(void) {
-    uint32_t status;
+	uint32_t status;
 
-    if (!sst_read(SST_STATUS, &status)) {
-        return false;
-    }
+	if (!sst_read(SST_STATUS, &status)) { return false; }
 
-    return (status & SST_STATUS_DATA_READY) != 0;
+	return (status & SST_STATUS_DATA_READY) != 0;
 }
 
-#endif // SST_DEVICE_H
+#endif  // SST_DEVICE_H

@@ -31,31 +31,31 @@
 
 // UART for console output
 #define UART_BASE 0x10000000
-#define UART_THR  (*(volatile uint8_t *)(UART_BASE + 0x00))
+#define UART_THR  (*(volatile uint8_t*)(UART_BASE + 0x00))
 
 // Echo Device (Device 1) at 0x10200000
-#define ECHO_DEVICE_BASE  0x10200000
-#define ECHO_DATA_IN      (*(volatile uint32_t *)(ECHO_DEVICE_BASE + 0x00))
-#define ECHO_DATA_OUT     (*(volatile uint32_t *)(ECHO_DEVICE_BASE + 0x04))
-#define ECHO_STATUS       (*(volatile uint32_t *)(ECHO_DEVICE_BASE + 0x08))
-#define ECHO_CONTROL      (*(volatile uint32_t *)(ECHO_DEVICE_BASE + 0x0C))
+#define ECHO_DEVICE_BASE 0x10200000
+#define ECHO_DATA_IN     (*(volatile uint32_t*)(ECHO_DEVICE_BASE + 0x00))
+#define ECHO_DATA_OUT    (*(volatile uint32_t*)(ECHO_DEVICE_BASE + 0x04))
+#define ECHO_STATUS      (*(volatile uint32_t*)(ECHO_DEVICE_BASE + 0x08))
+#define ECHO_CONTROL     (*(volatile uint32_t*)(ECHO_DEVICE_BASE + 0x0C))
 
 // Compute Device (Device 2) at 0x10300000
-#define COMPUTE_DEVICE_BASE  0x10300000
-#define COMPUTE_OPERAND_A    (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x00))
-#define COMPUTE_OPERAND_B    (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x04))
-#define COMPUTE_OPERATION    (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x08))
-#define COMPUTE_RESULT       (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x0C))
-#define COMPUTE_STATUS       (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x10))
-#define COMPUTE_CONTROL      (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x14))
-#define COMPUTE_PEER_OUT     (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x18))
-#define COMPUTE_PEER_IN      (*(volatile uint32_t *)(COMPUTE_DEVICE_BASE + 0x1C))
+#define COMPUTE_DEVICE_BASE 0x10300000
+#define COMPUTE_OPERAND_A   (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x00))
+#define COMPUTE_OPERAND_B   (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x04))
+#define COMPUTE_OPERATION   (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x08))
+#define COMPUTE_RESULT      (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x0C))
+#define COMPUTE_STATUS      (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x10))
+#define COMPUTE_CONTROL     (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x14))
+#define COMPUTE_PEER_OUT    (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x18))
+#define COMPUTE_PEER_IN     (*(volatile uint32_t*)(COMPUTE_DEVICE_BASE + 0x1C))
 
 // Compute operations
-#define OP_ADD  0
-#define OP_SUB  1
-#define OP_MUL  2
-#define OP_DIV  3
+#define OP_ADD 0
+#define OP_SUB 1
+#define OP_MUL 2
+#define OP_DIV 3
 
 // Status bits
 #define STATUS_BUSY       0x01
@@ -68,28 +68,20 @@
 #define CONTROL_TRIGGER 0x02
 
 // Simple UART print functions
-void uart_putc(char c) {
-	UART_THR = c;
-}
+void uart_putc(char c) { UART_THR = c; }
 
 void uart_puts(const char* s) {
-	while (*s) {
-		uart_putc(*s++);
-	}
+	while (*s) { uart_putc(*s++); }
 }
 
 void uart_puthex(uint32_t val) {
 	const char hex[] = "0123456789ABCDEF";
 	uart_puts("0x");
-	for (int i = 28; i >= 0; i -= 4) {
-		uart_putc(hex[(val >> i) & 0xF]);
-	}
+	for (int i = 28; i >= 0; i -= 4) { uart_putc(hex[(val >> i) & 0xF]); }
 }
 
 void wait_cycles(uint32_t cycles) {
-	for (volatile uint32_t i = 0; i < cycles; i++) {
-		asm volatile("nop");
-	}
+	for (volatile uint32_t i = 0; i < cycles; i++) { asm volatile("nop"); }
 }
 
 // Test echo device
@@ -98,14 +90,12 @@ int test_echo_device(void) {
 
 	// Write data and read it back
 	uint32_t test_val = 0xCAFEBABE;
-	ECHO_DATA_IN = test_val;
-	ECHO_CONTROL = CONTROL_TRIGGER;
+	ECHO_DATA_IN      = test_val;
+	ECHO_CONTROL      = CONTROL_TRIGGER;
 
 	// Wait for ready
 	uint32_t timeout = 10000;
-	while ((ECHO_STATUS & STATUS_READY) == 0 && timeout-- > 0) {
-		wait_cycles(10);
-	}
+	while ((ECHO_STATUS & STATUS_READY) == 0 && timeout-- > 0) { wait_cycles(10); }
 
 	if (timeout == 0) {
 		uart_puts("  [FAIL] Echo device timeout\n");
@@ -137,7 +127,7 @@ int test_compute_device(void) {
 	COMPUTE_OPERAND_A = 42;
 	COMPUTE_OPERAND_B = 58;
 	COMPUTE_OPERATION = OP_ADD;
-	COMPUTE_CONTROL = CONTROL_TRIGGER;
+	COMPUTE_CONTROL   = CONTROL_TRIGGER;
 
 	// Wait for computation
 	uint32_t timeout = 10000;
@@ -166,12 +156,10 @@ int test_compute_device(void) {
 	COMPUTE_OPERAND_A = 12;
 	COMPUTE_OPERAND_B = 5;
 	COMPUTE_OPERATION = OP_MUL;
-	COMPUTE_CONTROL = CONTROL_TRIGGER;
+	COMPUTE_CONTROL   = CONTROL_TRIGGER;
 
 	timeout = 10000;
-	while ((COMPUTE_STATUS & STATUS_READY) == 0 && timeout-- > 0) {
-		wait_cycles(100);
-	}
+	while ((COMPUTE_STATUS & STATUS_READY) == 0 && timeout-- > 0) { wait_cycles(100); }
 
 	if (timeout == 0) {
 		uart_puts("  [FAIL] Compute timeout (MUL)\n");
@@ -194,12 +182,10 @@ int test_compute_device(void) {
 	COMPUTE_OPERAND_A = 100;
 	COMPUTE_OPERAND_B = 4;
 	COMPUTE_OPERATION = OP_DIV;
-	COMPUTE_CONTROL = CONTROL_TRIGGER;
+	COMPUTE_CONTROL   = CONTROL_TRIGGER;
 
 	timeout = 10000;
-	while ((COMPUTE_STATUS & STATUS_READY) == 0 && timeout-- > 0) {
-		wait_cycles(100);
-	}
+	while ((COMPUTE_STATUS & STATUS_READY) == 0 && timeout-- > 0) { wait_cycles(100); }
 
 	if (timeout == 0) {
 		uart_puts("  [FAIL] Compute timeout (DIV)\n");
@@ -227,14 +213,12 @@ int test_inter_device_communication(void) {
 
 	// Step 1: Write a value to echo device
 	uint32_t echo_val = 0xDEAD1337;
-	ECHO_DATA_IN = echo_val;
-	ECHO_CONTROL = CONTROL_TRIGGER;
+	ECHO_DATA_IN      = echo_val;
+	ECHO_CONTROL      = CONTROL_TRIGGER;
 
 	// Wait for echo device to be ready
 	uint32_t timeout = 10000;
-	while ((ECHO_STATUS & STATUS_READY) == 0 && timeout-- > 0) {
-		wait_cycles(10);
-	}
+	while ((ECHO_STATUS & STATUS_READY) == 0 && timeout-- > 0) { wait_cycles(10); }
 
 	if (timeout == 0) {
 		uart_puts("  [FAIL] Echo device timeout\n");
@@ -247,9 +231,7 @@ int test_inter_device_communication(void) {
 
 	// Wait for peer data to arrive
 	timeout = 10000;
-	while ((COMPUTE_STATUS & STATUS_PEER_READY) == 0 && timeout-- > 0) {
-		wait_cycles(100);
-	}
+	while ((COMPUTE_STATUS & STATUS_PEER_READY) == 0 && timeout-- > 0) { wait_cycles(100); }
 
 	if (timeout == 0) {
 		uart_puts("  [FAIL] Peer communication timeout\n");
