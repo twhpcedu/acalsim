@@ -54,9 +54,7 @@ pre-commit: # Run pre-commit against the whole repository
 .PHONY: init clean
 
 init: clean # Initialize the repository
-	@rm -rf third-party/*/
-	@git submodule update --init --recursive --depth 1
-	@pre-commit install
+	@bash scripts/init-submodules.sh
 
 clean: # Clean built files
 	@rm -rf $(BUILD_DIR)
