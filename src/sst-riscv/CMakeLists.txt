@@ -13,6 +13,15 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.12)
+
+# Make SST integration optional
+option(ENABLE_SST "Enable SST integration" OFF)
+
+if(NOT ENABLE_SST)
+    message(STATUS "SST integration disabled (set -DENABLE_SST=ON to enable)")
+    return()
+endif()
+
 project(ACALSim_SST_Integration VERSION 1.0.0 LANGUAGES CXX)
 
 # C++ Standard
@@ -30,12 +39,13 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 # ========== Find SST-Core ==========
 
 # Find sst-config executable
-find_program(SST_CONFIG sst-config REQUIRED)
+find_program(SST_CONFIG sst-config)
 if(NOT SST_CONFIG)
     message(
-        FATAL_ERROR
-        "sst-config not found. Please install SST-Core and ensure it's in PATH."
+        WARNING
+        "sst-config not found. SST integration will be disabled. Install SST-Core to enable."
     )
+    return()
 endif()
 
 message(STATUS "Found sst-config: ${SST_CONFIG}")
@@ -54,175 +64,101 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-# Get SST prefix
+# Get SST include directory
+execute_process(
+    COMMAND ${SST_CONFIG} --includedir
+    OUTPUT_VARIABLE SST_INCLUDE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Get SST library directory
+execute_process(
+    COMMAND ${SST_CONFIG} --libdir
+    OUTPUT_VARIABLE SST_LIB_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+message(STATUS "SST Include Dir: ${SST_INCLUDE_DIR}")
+message(STATUS "SST Library Dir: ${SST_LIB_DIR}")
+
+# ========== Find ACALSim ==========
+
+# Assume ACALSim is built and installed
+set(ACALSIM_ROOT ${PROJECT_SOURCE_DIR}/../..)
+set(ACALSIM_INCLUDE_DIR ${ACALSIM_ROOT}/include)
+set(ACALSIM_LIB_DIR ${ACALSIM_ROOT}/lib)
+
+if(NOT EXISTS ${ACALSIM_INCLUDE_DIR})
+    message(
+        FATAL_ERROR
+        "ACALSim headers not found at ${ACALSIM_INCLUDE_DIR}. Build ACALSim first."
+    )
+endif()
+
+message(STATUS "ACALSim Include Dir: ${ACALSIM_INCLUDE_DIR}")
+message(STATUS "ACALSim Library Dir: ${ACALSIM_LIB_DIR}")
+
+# ========== Build SST Element ==========
+
+# Source files
+set(SST_ELEMENT_SOURCES
+    src/SSTACALSimComponent.cc
+    # Add more source files as needed
+)
+
+# Create shared library for SST element
+add_library(acalsim MODULE ${SST_ELEMENT_SOURCES})
+
+# Set library properties
+set_target_properties(
+    acalsim
+    PROPERTIES
+        PREFIX "lib"
+        SUFFIX ".so"
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+)
+
+# Include directories
+target_include_directories(
+    acalsim
+    PRIVATE
+        ${SST_INCLUDE_DIR}
+        ${ACALSIM_INCLUDE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# Compiler flags
+target_compile_options(acalsim PRIVATE ${SST_CXXFLAGS_RAW} -fPIC)
+
+# Link libraries
+target_link_libraries(
+    acalsim
+    PRIVATE ${ACALSIM_LIB_DIR}/libacalsim.a
+    # Add other required libraries
+)
+
+# Linker flags
+target_link_options(acalsim PRIVATE ${SST_LDFLAGS_RAW})
+
+# ========== Installation ==========
+
+# Get SST element directory
 execute_process(
     COMMAND ${SST_CONFIG} --prefix
     OUTPUT_VARIABLE SST_PREFIX
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-# Separate the flags into lists
-separate_arguments(SST_CXXFLAGS UNIX_COMMAND "${SST_CXXFLAGS_RAW}")
-separate_arguments(SST_LDFLAGS UNIX_COMMAND "${SST_LDFLAGS_RAW}")
+set(SST_ELEMENT_INSTALL_DIR ${SST_PREFIX}/lib/sstcore-13.1.0)
 
-# Filter out -I flags from CXXFLAGS (we handle includes separately)
-set(SST_COMPILE_FLAGS "")
-foreach(flag ${SST_CXXFLAGS})
-    if(NOT flag MATCHES "^-I")
-        list(APPEND SST_COMPILE_FLAGS ${flag})
-    endif()
-endforeach()
+message(STATUS "SST Element Install Dir: ${SST_ELEMENT_INSTALL_DIR}")
 
-message(STATUS "SST prefix: ${SST_PREFIX}")
-message(STATUS "SST CXXFLAGS: ${SST_CXXFLAGS_RAW}")
-message(STATUS "SST LDFLAGS: ${SST_LDFLAGS_RAW}")
+# Install the shared library
+install(TARGETS acalsim LIBRARY DESTINATION ${SST_ELEMENT_INSTALL_DIR})
 
-# ========== Find ACALSim ==========
-
-# ACALSim paths (adjust if needed)
-set(ACALSIM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-set(ACALSIM_INCLUDE "${ACALSIM_ROOT}/include")
-set(ACALSIM_LIB "${ACALSIM_ROOT}/lib")
-
-# Check if ACALSim include directory exists
-if(NOT EXISTS "${ACALSIM_INCLUDE}")
-    message(
-        FATAL_ERROR
-        "ACALSim include directory not found: ${ACALSIM_INCLUDE}"
-    )
-endif()
-
-# Find ACALSim library
-find_library(
-    ACALSIM_LIBRARY
-    NAMES acalsim libacalsim
-    PATHS ${ACALSIM_LIB}
-    NO_DEFAULT_PATH
-)
-
-if(NOT ACALSIM_LIBRARY)
-    message(WARNING "ACALSim library not found. Please build ACALSim first.")
-    message(WARNING "Searched in: ${ACALSIM_LIB}")
-    set(ACALSIM_LIBRARY "")
-else()
-    message(STATUS "Found ACALSim library: ${ACALSIM_LIBRARY}")
-endif()
-
-# ========== SST Element Library ==========
-
-# Source files
-set(SOURCES ACALSimComponent.cc RISCVSoCComponent.cc RISCVSoCStandalone.cc)
-
-# Create shared library
-add_library(acalsim_sst SHARED ${SOURCES})
-
-# Include directories
-target_include_directories(
-    acalsim_sst
-    PRIVATE
-        ${SST_PREFIX}/include
-        ${ACALSIM_INCLUDE}
-        ${ACALSIM_INCLUDE}/external
-        ${ACALSIM_INCLUDE}/sim
-        ${ACALSIM_INCLUDE}/event
-        ${ACALSIM_INCLUDE}/packet
-        ${ACALSIM_INCLUDE}/port
-        ${ACALSIM_INCLUDE}/channel
-        ${ACALSIM_ROOT}/third-party/cpp-channel/include
-        ${ACALSIM_ROOT}/third-party/json/include
-        ${ACALSIM_ROOT}/third-party/CLI11/include
-        ${ACALSIM_ROOT}/src/riscv/include
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# Compiler flags
-target_compile_options(
-    acalsim_sst
-    PRIVATE -Wall -Wextra -O2 -g ${SST_COMPILE_FLAGS}
-)
-
-# Linker flags
-target_link_libraries(acalsim_sst PRIVATE ${ACALSIM_LIBRARY} ${SST_LDFLAGS})
-
-# Set library properties
-set_target_properties(
-    acalsim_sst
-    PROPERTIES
-        PREFIX "lib"
-        OUTPUT_NAME "acalsim_sst"
-        POSITION_INDEPENDENT_CODE ON
-)
-
-# ========== Installation ==========
-
-# Install to SST element library directory
-set(SST_ELEMENT_LIB_DIR "${SST_PREFIX}/lib/sst-elements-library")
-
-install(
-    TARGETS acalsim_sst
-    LIBRARY
-    DESTINATION ${SST_ELEMENT_LIB_DIR}
-    RUNTIME
-    DESTINATION ${SST_ELEMENT_LIB_DIR}
-)
-
-message(STATUS "Install destination: ${SST_ELEMENT_LIB_DIR}")
-
-# ========== Testing ==========
-
-# Custom target to test installation
-add_custom_target(
-    test_sst
-    COMMAND ${SST_CONFIG} --version
-    COMMAND sst-info acalsim
-    COMMENT "Testing SST element installation"
-    VERBATIM
-)
-
-# ========== Examples ==========
-
-# Custom target to list examples
-add_custom_target(
-    examples
-    COMMAND ${CMAKE_COMMAND} -E echo "Example configurations:"
-    COMMAND
-        ${CMAKE_COMMAND} -E echo
-        "  sst ${CMAKE_CURRENT_SOURCE_DIR}/examples/simple_system.py"
-    COMMAND
-        ${CMAKE_COMMAND} -E echo
-        "  sst ${CMAKE_CURRENT_SOURCE_DIR}/examples/multicore_system.py"
-    COMMENT "Listing example configurations"
-    VERBATIM
-)
-
-# ========== Uninstall ==========
-
-# Add uninstall target
-add_custom_target(
-    uninstall
-    COMMAND ${CMAKE_COMMAND} -E remove ${SST_ELEMENT_LIB_DIR}/libacalsim_sst.so
-    COMMENT "Uninstalling ACALSim SST element"
-    VERBATIM
-)
-
-# ========== Summary ==========
-
-message(STATUS "")
 message(STATUS "========================================")
-message(STATUS "ACALSim SST Integration Configuration")
+message(STATUS "SST Integration Configuration Complete")
 message(STATUS "========================================")
-message(STATUS "Build type:       ${CMAKE_BUILD_TYPE}")
-message(STATUS "C++ standard:     C++${CMAKE_CXX_STANDARD}")
-message(STATUS "SST prefix:       ${SST_PREFIX}")
-message(STATUS "ACALSim include:  ${ACALSIM_INCLUDE}")
-message(STATUS "ACALSim library:  ${ACALSIM_LIBRARY}")
-message(STATUS "Install dir:      ${SST_ELEMENT_LIB_DIR}")
-message(STATUS "")
-message(STATUS "Build commands:")
-message(STATUS "  mkdir build && cd build")
-message(STATUS "  cmake ..")
-message(STATUS "  make")
+message(STATUS "To install the SST element, run:")
 message(STATUS "  make install")
-message(STATUS "  make test_sst")
 message(STATUS "========================================")
-message(STATUS "")
