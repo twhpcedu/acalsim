@@ -1,9 +1,10 @@
 #!/bin/bash
-# Boot DQIB Debian RISC-V image
+# Boot DQIB Debian RISC-V image with custom kernel
 
 QEMU_BIN=${QEMU_BIN:-/home/user/qemu-build/qemu/build/qemu-system-riscv64}
 DQIB_DIR="/home/user/debian-riscv/dqib_riscv64-virt"
-KERNEL="$DQIB_DIR/kernel"
+# Use custom kernel instead of DQIB kernel
+KERNEL="/home/user/linux/arch/riscv/boot/Image"
 INITRD="$DQIB_DIR/initrd"
 DEBIAN_DISK="$DQIB_DIR/image.qcow2"
 SOCKET_PATH="/tmp/qemu-sst-llama.sock"
@@ -19,20 +20,34 @@ if [ ! -f "$DEBIAN_DISK" ]; then
 	exit 1
 fi
 
+if [ ! -f "$KERNEL" ]; then
+	echo "Error: Custom kernel not found at: $KERNEL"
+	echo ""
+	echo "Please build it first: cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/qemu-config && ./build-linux-kernel.sh"
+	exit 1
+fi
+
 echo "======================================"
-echo "Booting DQIB Debian RISC-V Linux"
+echo "Booting DQIB Debian with Custom Kernel"
 echo "======================================"
+echo ""
+echo "Kernel: $KERNEL"
 echo ""
 echo "Login credentials:"
 echo "  root / root"
 echo "  debian / debian"
 echo ""
 echo "SSH access: ssh -p 2222 debian@localhost"
+echo "Device server port: localhost:9999"
 echo ""
 echo "Shared Folder:"
 echo "  Host (Docker): $SHARED_HOST_DIR"
 echo "  Guest mount point: /mnt/shared"
 echo "  Already configured in /etc/fstab"
+echo ""
+echo "VirtIO-SST Module:"
+echo "  Located at: /mnt/shared/acalsim/src/qemu-acalsim-sst-linux/drivers/virtio-sst.ko"
+echo "  Load with: sudo insmod /mnt/shared/acalsim/src/qemu-acalsim-sst-linux/drivers/virtio-sst.ko"
 echo ""
 echo "Press Ctrl-A then X to exit QEMU"
 echo "======================================"

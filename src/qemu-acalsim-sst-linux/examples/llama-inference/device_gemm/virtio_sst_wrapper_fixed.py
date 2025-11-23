@@ -13,7 +13,7 @@
 # limitations under the License.
 """
 Python wrapper for /dev/sst0 VirtIO-SST device
-Provides high-level interface for SST communication
+Matches the actual sst-protocol.h structure
 """
 import struct
 import os
@@ -40,50 +40,77 @@ class SSTStatus:
 	NO_DEVICE = 5
 
 
-# Request structure (simplified Python representation)
-# Full C structure is more complex, but we'll use binary packing
-class SSTRequest:
+# From sst-protocol.h
+SST_MAX_DATA_SIZE = 4080
 
-	def __init__(self, req_type, user_data=0):
+
+class SSTRequest:
+	"""
+    struct SSTRequest {
+        uint32_t type;        // 4 bytes
+        uint32_t flags;       // 4 bytes
+        uint64_t request_id;  // 8 bytes
+        uint64_t user_data;   // 8 bytes
+        union { uint8_t data[4080]; } payload;  // 4080 bytes
+    } __attribute__((packed));
+
+    Total: 4104 bytes
+    """
+	SIZE = 4104
+
+	def __init__(self, req_type, request_id=0, user_data=0, flags=0):
 		self.type = req_type
-		self.request_id = 0  # Assigned by driver
-		self.flags = 0
+		self.flags = flags
+		self.request_id = request_id
 		self.user_data = user_data
-		self.payload_size = 0
-		self.payload = b''
+		self.payload = b'\x00' * SST_MAX_DATA_SIZE  # 4080 bytes of zeros
 
 	def pack(self):
-		"""Pack request into binary format for /dev/sst0"""
-		# Simplified format: type(4) + request_id(8) + flags(4) + user_data(8) + payload_size(4)
-		header = struct.pack(
-		    '<IQIQI', self.type, self.request_id, self.flags, self.user_data, len(self.payload)
-		)
-		return header + self.payload
+		"""Pack request into binary format"""
+		# Header: type(4) + flags(4) + request_id(8) + user_data(8) = 24 bytes
+		header = struct.pack('<IIQQ', self.type, self.flags, self.request_id, self.user_data)
+		# Payload: 4080 bytes
+		payload = self.payload[: SST_MAX_DATA_SIZE].ljust(SST_MAX_DATA_SIZE, b'\x00')
+		return header + payload
 
 
 class SSTResponse:
+	"""
+    struct SSTResponse {
+        uint32_t status;      // 4 bytes
+        uint32_t reserved;    // 4 bytes
+        uint64_t request_id;  // 8 bytes
+        uint64_t user_data;   // 8 bytes
+        uint64_t result;      // 8 bytes
+        union { uint8_t data[4080]; } payload;  // 4080 bytes
+    } __attribute__((packed));
+
+    Total: 4112 bytes
+    """
+	SIZE = 4112
 
 	def __init__(self):
 		self.status = 0
+		self.reserved = 0
 		self.request_id = 0
 		self.user_data = 0
-		self.payload_size = 0
+		self.result = 0
 		self.payload = b''
 
 	@staticmethod
 	def unpack(data):
 		"""Unpack response from /dev/sst0"""
-		resp = SSTResponse()
-		if len(data) < 28:  # Minimum header size
+		if len(data) < 32:  # Minimum header size
 			return None
 
-		# Parse header
-		(resp.status, resp.request_id, resp.user_data, resp.payload_size) = \
-                                                struct.unpack('<IQQI', data[:28])
+		resp = SSTResponse()
+		# Parse header: status(4) + reserved(4) + request_id(8) + user_data(8) + result(8) = 32 bytes
+		(resp.status, resp.reserved, resp.request_id, resp.user_data, resp.result) = \
+                  struct.unpack('<IIQQQ', data[:32])
 
 		# Extract payload if present
-		if resp.payload_size > 0 and len(data) >= 28 + resp.payload_size:
-			resp.payload = data[28 : 28 + resp.payload_size]
+		if len(data) >= 32 + SST_MAX_DATA_SIZE:
+			resp.payload = data[32 : 32 + SST_MAX_DATA_SIZE]
 
 		return resp
 
@@ -94,13 +121,14 @@ class VirtIOSST:
 	def __init__(self, device_path='/dev/sst0'):
 		self.device_path = device_path
 		self.fd = None
+		self.next_request_id = 1
 
 	def open(self):
 		"""Open SST device"""
 		if not os.path.exists(self.device_path):
 			raise FileNotFoundError(
 			    f"Device {self.device_path} not found. "
-			    "Run setup_virtio_sst.sh first."
+			    "Load module with: sudo insmod virtio-sst.ko"
 			)
 
 		self.fd = os.open(self.device_path, os.O_RDWR)
@@ -117,15 +145,22 @@ class VirtIOSST:
 		if self.fd is None:
 			raise RuntimeError("Device not opened")
 
+		# Assign request ID
+		req.request_id = self.next_request_id
+		self.next_request_id += 1
+
 		# Pack and write request
 		data = req.pack()
+		if len(data) != SSTRequest.SIZE:
+			raise RuntimeError(f"Invalid request size: {len(data)}, expected {SSTRequest.SIZE}")
+
 		written = os.write(self.fd, data)
 
 		if written != len(data):
 			raise RuntimeError(f"Write failed: {written}/{len(data)} bytes")
 
 		# Read response (blocking)
-		resp_data = os.read(self.fd, 4096)  # Max response size
+		resp_data = os.read(self.fd, SSTResponse.SIZE)
 
 		# Unpack response
 		resp = SSTResponse.unpack(resp_data)
@@ -150,25 +185,35 @@ class VirtIOSST:
 	def echo(self, data):
 		"""Send echo request"""
 		req = SSTRequest(SSTRequestType.ECHO)
-		req.payload = data if isinstance(data, bytes) else data.encode()
+		# Pack data into payload
+		if isinstance(data, str):
+			data = data.encode()
+		req.payload = data[: SST_MAX_DATA_SIZE].ljust(SST_MAX_DATA_SIZE, b'\x00')
+
 		resp = self.send_request(req)
 
 		if resp.status == SSTStatus.OK:
-			return resp.payload
+			# Extract echoed data (strip null padding)
+			return resp.payload[: len(data)]
 		else:
 			raise RuntimeError(f"Echo failed: status={resp.status}")
 
 	def compute(self, compute_units, latency_model=0):
 		"""Submit compute request to SST"""
 		req = SSTRequest(SSTRequestType.COMPUTE)
-		# Pack compute payload: compute_units(8) + latency_model(4)
-		req.payload = struct.pack('<QI', compute_units, latency_model)
+		# Pack compute payload: compute_units(8) + latency_model(4) + reserved(4)
+		compute_payload = struct.pack('<QII', compute_units, latency_model, 0)
+		req.payload = compute_payload.ljust(SST_MAX_DATA_SIZE, b'\x00')
 
 		resp = self.send_request(req)
 
-		if resp.status == SSTStatus.OK and len(resp.payload) >= 8:
-			cycles = struct.unpack('<Q', resp.payload[: 8])[0]
-			return {'status': 'ok', 'cycles': cycles}
+		if resp.status == SSTStatus.OK:
+			# Parse compute response from payload
+			if len(resp.payload) >= 16:
+				cycles, timestamp = struct.unpack('<QQ', resp.payload[: 16])
+				return {'status': 'ok', 'cycles': cycles, 'timestamp': timestamp}
+			else:
+				return {'status': 'ok', 'result': resp.result}
 		else:
 			return {'status': 'error', 'code': resp.status}
 
@@ -179,7 +224,18 @@ class VirtIOSST:
 
 		if resp.status == SSTStatus.OK:
 			# Parse device info from payload
-			return {'status': 'ok', 'info': resp.payload}
+			if len(resp.payload) >= 32:
+				version, capabilities, max_compute, mem_size = \
+                                struct.unpack('<IIQQ', resp.payload[:24])
+				return {
+				    'status': 'ok',
+				    'version': version,
+				    'capabilities': capabilities,
+				    'max_compute_units': max_compute,
+				    'memory_size': mem_size
+				}
+			else:
+				return {'status': 'ok', 'info': resp.payload}
 		else:
 			return {'status': 'error', 'code': resp.status}
 
@@ -194,7 +250,7 @@ class VirtIOSST:
 # Example usage
 if __name__ == '__main__':
 	print("=" * 60)
-	print("VirtIO-SST Device Test")
+	print("VirtIO-SST Device Test (Protocol v2)")
 	print("=" * 60)
 	print()
 
@@ -233,9 +289,11 @@ if __name__ == '__main__':
 		print(f"✗ {e}")
 		print()
 		print("Setup required:")
-		print("  1. Run QEMU with: -device virtio-sst-device,socket=/tmp/qemu-sst-llama.sock")
-		print("  2. Inside QEMU, run: bash /mnt/shared/device_gemm/setup_virtio_sst.sh")
-		print("  3. Verify /dev/sst0 exists")
+		print("  1. Run QEMU with custom kernel")
+		print(
+		    "  2. Inside QEMU, run: sudo insmod /mnt/shared/acalsim/src/qemu-acalsim-sst-linux/drivers/virtio-sst.ko"
+		)
+		print("  3. Fix permissions: sudo chmod 666 /dev/sst0")
 	except Exception as e:
 		print(f"✗ Error: {e}")
 		import traceback

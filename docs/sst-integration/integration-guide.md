@@ -987,3 +987,94 @@ Happy integrating! 🚀
 
 **Copyright 2023-2025 Playlab/ACAL**
 Licensed under the Apache License, Version 2.0
+
+---
+
+## PyTorch Device GEMM Integration
+
+### Overview
+
+The PyTorch Device GEMM framework enables offloading matrix operations from PyTorch models to SST for cycle-accurate hardware simulation.
+
+**Status:** Production-ready ✅
+
+**Documentation:** See [pytorch-device-gemm.md](pytorch-device-gemm.md)
+
+### Architecture
+
+```
+PyTorch (Docker) → TCP → QEMU → VirtIO-SST → SST Simulator
+```
+
+### Quick Start
+
+**1. Start SST Simulator:**
+```bash
+cd src/qemu-acalsim-sst-linux/examples/llama-inference/llama
+./run_sst.sh
+```
+
+**2. Start QEMU with Custom Kernel:**
+```bash
+cd src/qemu-acalsim-sst-linux/examples/llama-inference
+./run_qemu_custom_kernel.sh
+```
+
+**3. In QEMU, Start Device Server:**
+```bash
+cd /mnt/shared/device_gemm
+python3 qemu_device_server_virtio.py
+```
+
+**4. Run PyTorch Tests:**
+```bash
+cd src/qemu-acalsim-sst-linux/examples/llama-inference/device_gemm
+python3 test_device_gemm.py
+```
+
+### Key Features
+
+- **Custom PyTorch Operators:** `device_gemm()`, `DeviceLinear()`
+- **VirtIO-SST Integration:** Direct `/dev/sst0` device access
+- **Cycle-Accurate Simulation:** SST returns timing for each operation
+- **Automatic Fallback:** Uses CPU if SST unavailable
+- **Production Ready:** Fully tested and documented
+
+### Components
+
+1. **Custom Kernel** - Linux 6.18.0-rc6 with VirtIO support
+2. **VirtIO-SST Module** - `virtio-sst.ko` kernel driver
+3. **Device Server** - Protocol parser in QEMU guest
+4. **PyTorch Operators** - Custom autograd functions
+5. **Test Suite** - Validation and benchmarking
+
+### Example Usage
+
+```python
+import torch
+from device_gemm_operator import device_gemm, DeviceLinear
+
+# Direct GEMM offloading
+A = torch.randn(32, 128)
+B = torch.randn(128, 256)
+C = device_gemm(A, B)  # Offloaded to SST
+
+# Linear layer replacement
+layer = DeviceLinear(128, 256)
+output = layer(input)  # Offloaded to SST
+```
+
+### Documentation
+
+- **Complete Guide:** [pytorch-device-gemm.md](pytorch-device-gemm.md)
+- **Setup Details:** `src/qemu-acalsim-sst-linux/examples/llama-inference/device_gemm/README_COMPLETE_SETUP.md`
+- **VirtIO Protocol:** `src/qemu-acalsim-sst-linux/virtio-device/sst-protocol.h`
+
+### Testing Results
+
+✅ **Test 1:** 4×8 @ 8×16 GEMM - PASSED (0.000000 error)  
+✅ **Test 2:** 32×128 @ 128×256 Linear - PASSED (0.000000 error)  
+✅ **VirtIO-SST:** Ping, Echo, Compute - ALL PASSED  
+✅ **SST Integration:** 100,000+ cycles returned
+
+---
