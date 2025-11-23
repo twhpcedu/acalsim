@@ -31,7 +31,7 @@ echo "================================"
 echo ""
 echo "Quick command to run as root:"
 echo ""
-cat << 'SUDOCMD'
+cat <<'SUDOCMD'
 apt update && \
 apt install -y sudo && \
 usermod -aG sudo debian && \

@@ -12,18 +12,18 @@ SOCKET_PATH="/tmp/qemu-sst-llama.sock"
 rm -f "$SOCKET_PATH"
 
 exec $QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp 4 \
-    -m 8G \
-    -kernel "$KERNEL" \
-    -initrd "$INITRD" \
-    -append "console=ttyS0 root=/dev/vda1 rootwait rw" \
-    -drive file="$DEBIAN_DISK",if=none,id=hd,format=qcow2 \
-    -device virtio-blk-device,drive=hd \
-    -netdev user,id=net0,hostfwd=tcp::2222-:22 \
-    -device virtio-net-device,netdev=net0 \
-    -device virtio-sst-device,socket=$SOCKET_PATH \
-    -object rng-random,filename=/dev/urandom,id=rng \
-    -device virtio-rng-device,rng=rng \
-    -nographic
+	-M virt \
+	-cpu rv64 \
+	-smp 4 \
+	-m 8G \
+	-kernel "$KERNEL" \
+	-initrd "$INITRD" \
+	-append "console=ttyS0 root=/dev/vda1 rootwait rw" \
+	-drive file="$DEBIAN_DISK",if=none,id=hd,format=qcow2 \
+	-device virtio-blk-device,drive=hd \
+	-netdev user,id=net0,hostfwd=tcp::2222-:22 \
+	-device virtio-net-device,netdev=net0 \
+	-device virtio-sst-device,socket=$SOCKET_PATH \
+	-object rng-random,filename=/dev/urandom,id=rng \
+	-device virtio-rng-device,rng=rng \
+	-nographic

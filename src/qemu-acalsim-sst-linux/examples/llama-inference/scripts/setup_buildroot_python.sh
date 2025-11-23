@@ -284,7 +284,6 @@ else
 	exit 1
 fi
 
-
 echo ""
 echo "============================================================"
 echo "Step 4: Create Initramfs Symlink"

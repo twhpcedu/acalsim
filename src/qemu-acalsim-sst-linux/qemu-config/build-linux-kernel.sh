@@ -39,15 +39,15 @@ echo ""
 echo -e "${GREEN}[1/5] Installing build dependencies...${NC}"
 sudo apt-get update -qq
 sudo apt-get install -y \
-  build-essential \
-  libncurses-dev \
-  bison \
-  flex \
-  libssl-dev \
-  libelf-dev \
-  bc \
-  gcc-riscv64-linux-gnu \
-  git
+	build-essential \
+	libncurses-dev \
+	bison \
+	flex \
+	libssl-dev \
+	libelf-dev \
+	bc \
+	gcc-riscv64-linux-gnu \
+	git
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
@@ -57,21 +57,21 @@ echo -e "${GREEN}[2/5] Cloning Linux kernel...${NC}"
 cd "$BUILD_DIR"
 
 if [ -d "$LINUX_DIR" ]; then
-  echo -e "${YELLOW}⚠ Linux directory exists${NC}"
-  read -p "Remove and re-clone? (y/N): " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -rf "$LINUX_DIR"
-  else
-    echo "Using existing kernel source"
-    cd "$LINUX_DIR"
-    git fetch --all --tags
-  fi
+	echo -e "${YELLOW}⚠ Linux directory exists${NC}"
+	read -p "Remove and re-clone? (y/N): " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		rm -rf "$LINUX_DIR"
+	else
+		echo "Using existing kernel source"
+		cd "$LINUX_DIR"
+		git fetch --all --tags
+	fi
 fi
 
 if [ ! -d "$LINUX_DIR" ]; then
-  git clone --depth 1 --branch "$KERNEL_VERSION" https://github.com/torvalds/linux.git
-  cd "$LINUX_DIR"
+	git clone --depth 1 --branch "$KERNEL_VERSION" https://github.com/torvalds/linux.git
+	cd "$LINUX_DIR"
 fi
 
 echo -e "${GREEN}✓ Kernel source ready${NC}"
@@ -129,12 +129,12 @@ echo -e "${GREEN}[5/5] Verifying kernel image...${NC}"
 KERNEL_IMAGE="$LINUX_DIR/arch/riscv/boot/Image"
 
 if [ -f "$KERNEL_IMAGE" ]; then
-  KERNEL_SIZE=$(du -h "$KERNEL_IMAGE" | cut -f1)
-  echo -e "${GREEN}✓ Kernel image found: $KERNEL_IMAGE${NC}"
-  echo -e "${GREEN}  Size: $KERNEL_SIZE${NC}"
+	KERNEL_SIZE=$(du -h "$KERNEL_IMAGE" | cut -f1)
+	echo -e "${GREEN}✓ Kernel image found: $KERNEL_IMAGE${NC}"
+	echo -e "${GREEN}  Size: $KERNEL_SIZE${NC}"
 else
-  echo -e "${RED}✗ Kernel image not found at expected location${NC}"
-  exit 1
+	echo -e "${RED}✗ Kernel image not found at expected location${NC}"
+	exit 1
 fi
 
 echo ""

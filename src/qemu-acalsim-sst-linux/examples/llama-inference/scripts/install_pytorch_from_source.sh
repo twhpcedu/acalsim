@@ -32,8 +32,8 @@ echo ""
 read -p "Continue? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted"
-    exit 1
+	echo "Aborted"
+	exit 1
 fi
 
 # Step 1: Install build dependencies
@@ -59,13 +59,13 @@ echo ""
 
 cd /root
 if [ -d "pytorch" ]; then
-    echo "PyTorch directory already exists, using existing clone"
-    cd pytorch
-    git pull
+	echo "PyTorch directory already exists, using existing clone"
+	cd pytorch
+	git pull
 else
-    # Clone a stable version that's known to work
-    git clone --depth 1 --branch v2.0.1 https://github.com/pytorch/pytorch.git
-    cd pytorch
+	# Clone a stable version that's known to work
+	git clone --depth 1 --branch v2.0.1 https://github.com/pytorch/pytorch.git
+	cd pytorch
 fi
 
 echo "✓ PyTorch source ready"

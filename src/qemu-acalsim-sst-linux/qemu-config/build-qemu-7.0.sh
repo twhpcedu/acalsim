@@ -32,11 +32,11 @@ echo ""
 echo -e "${GREEN}[1/6] Installing dependencies...${NC}"
 sudo apt-get update -qq
 sudo apt-get install -y \
-  ninja-build meson build-essential \
-  libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
-  pkg-config python3 git \
-  libslirp-dev libslirp0 \
-  libcap-ng-dev libattr1-dev
+	ninja-build meson build-essential \
+	libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
+	pkg-config python3 git \
+	libslirp-dev libslirp0 \
+	libcap-ng-dev libattr1-dev
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
@@ -47,8 +47,8 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 if [ -d "qemu" ]; then
-  echo -e "${YELLOW}⚠ QEMU directory exists, cleaning...${NC}"
-  rm -rf qemu
+	echo -e "${YELLOW}⚠ QEMU directory exists, cleaning...${NC}"
+	rm -rf qemu
 fi
 
 git clone https://github.com/qemu/qemu.git
@@ -78,25 +78,25 @@ echo -e "${GREEN}[4/6] Updating build configuration...${NC}"
 # Add to meson.build (QEMU 7.0 uses virtio_ss source set)
 cd hw/virtio
 if grep -q "CONFIG_VIRTIO_SST" meson.build; then
-  echo -e "${YELLOW}⚠ virtio-sst already in meson.build${NC}"
+	echo -e "${YELLOW}⚠ virtio-sst already in meson.build${NC}"
 else
-  # Add to virtio_ss after VIRTIO_MEM
-  sed -i "/^virtio_ss.add(when: 'CONFIG_VIRTIO_MEM'/a virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))" meson.build
-  echo -e "${GREEN}✓ Updated meson.build${NC}"
+	# Add to virtio_ss after VIRTIO_MEM
+	sed -i "/^virtio_ss.add(when: 'CONFIG_VIRTIO_MEM'/a virtio_ss.add(when: 'CONFIG_VIRTIO_SST', if_true: files('virtio-sst.c'))" meson.build
+	echo -e "${GREEN}✓ Updated meson.build${NC}"
 fi
 
 # Add to Kconfig
 if grep -q "CONFIG_VIRTIO_SST" Kconfig; then
-  echo -e "${YELLOW}⚠ virtio-sst already in Kconfig${NC}"
+	echo -e "${YELLOW}⚠ virtio-sst already in Kconfig${NC}"
 else
-  cat >> Kconfig << 'EOF'
+	cat >>Kconfig <<'EOF'
 
 config VIRTIO_SST
     bool
     default y
     depends on VIRTIO
 EOF
-  echo -e "${GREEN}✓ Updated Kconfig${NC}"
+	echo -e "${GREEN}✓ Updated Kconfig${NC}"
 fi
 
 cd "$BUILD_DIR/qemu"
@@ -128,15 +128,15 @@ VERSION=$(./qemu-system-riscv64 --version | head -1)
 echo -e "${GREEN}Version: ${VERSION}${NC}"
 
 if ./qemu-system-riscv64 -device help 2>&1 | grep -q "virtio-sst"; then
-  echo -e "${GREEN}✓ virtio-sst-device: Available${NC}"
+	echo -e "${GREEN}✓ virtio-sst-device: Available${NC}"
 else
-  echo -e "${RED}✗ virtio-sst-device: NOT FOUND${NC}"
+	echo -e "${RED}✗ virtio-sst-device: NOT FOUND${NC}"
 fi
 
 if ./qemu-system-riscv64 -netdev help 2>&1 | grep -q "user"; then
-  echo -e "${GREEN}✓ user network backend: Available${NC}"
+	echo -e "${GREEN}✓ user network backend: Available${NC}"
 else
-  echo -e "${RED}✗ user network backend: NOT FOUND${NC}"
+	echo -e "${RED}✗ user network backend: NOT FOUND${NC}"
 fi
 
 echo ""

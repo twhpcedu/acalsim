@@ -106,7 +106,7 @@ class SSTResponse:
 		resp = SSTResponse()
 		# Parse header: status(4) + reserved(4) + request_id(8) + user_data(8) + result(8) = 32 bytes
 		(resp.status, resp.reserved, resp.request_id, resp.user_data, resp.result) = \
-                  struct.unpack('<IIQQQ', data[:32])
+                        struct.unpack('<IIQQQ', data[:32])
 
 		# Extract payload if present
 		if len(data) >= 32 + SST_MAX_DATA_SIZE:
@@ -226,7 +226,7 @@ class VirtIOSST:
 			# Parse device info from payload
 			if len(resp.payload) >= 32:
 				version, capabilities, max_compute, mem_size = \
-                                struct.unpack('<IIQQ', resp.payload[:24])
+                                            struct.unpack('<IIQQ', resp.payload[:24])
 				return {
 				    'status': 'ok',
 				    'version': version,

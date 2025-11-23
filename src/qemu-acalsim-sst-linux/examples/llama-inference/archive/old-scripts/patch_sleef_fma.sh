@@ -2,7 +2,7 @@
 # Patch SLEEF to fix FMA error on RISC-V
 # Run this inside Debian QEMU
 
-cat << 'PATCH_INSTRUCTIONS'
+cat <<'PATCH_INSTRUCTIONS'
 =====================================
 SLEEF FMA Patch for RISC-V
 =====================================

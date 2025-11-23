@@ -13,9 +13,9 @@ echo "Creating rootfs disk from buildroot..."
 
 # Check if buildroot output exists
 if [ ! -f "$BUILDROOT_TAR" ]; then
-    echo "ERROR: Buildroot output not found at $BUILDROOT_TAR"
-    echo "Please run setup_buildroot_python.sh first"
-    exit 1
+	echo "ERROR: Buildroot output not found at $BUILDROOT_TAR"
+	echo "Please run setup_buildroot_python.sh first"
+	exit 1
 fi
 
 # Create empty 10GB disk
@@ -23,7 +23,7 @@ echo "Creating 10GB qcow2 disk..."
 qemu-img create -f qcow2 "$TEMP_DISK" 10G
 
 # Create init script to format and populate disk
-cat > /tmp/populate-disk.sh << 'INITEOF'
+cat >/tmp/populate-disk.sh <<'INITEOF'
 #!/bin/sh
 echo "=== Formatting disk ==="
 mkfs.ext4 -F /dev/vda
@@ -58,7 +58,7 @@ mkdir -p "$INITRAMFS_DIR"/{bin,dev,mnt,proc,sys,tmp}
 cp /bin/busybox "$INITRAMFS_DIR/bin/"
 cd "$INITRAMFS_DIR/bin"
 for cmd in sh mount umount mkfs.ext4 poweroff sync tar cd chmod; do
-    ln -sf busybox $cmd 2>/dev/null || true
+	ln -sf busybox $cmd 2>/dev/null || true
 done
 cd -
 
@@ -71,20 +71,20 @@ chmod +x "$INITRAMFS_DIR/init"
 
 # Create initramfs
 cd "$INITRAMFS_DIR"
-find . | cpio -o -H newc | gzip > /tmp/populate.cpio.gz
+find . | cpio -o -H newc | gzip >/tmp/populate.cpio.gz
 
 echo "Booting QEMU to populate disk..."
 timeout 120 "$QEMU" \
-    -M virt \
-    -cpu rv64 \
-    -smp 2 \
-    -m 2G \
-    -kernel "$KERNEL" \
-    -initrd /tmp/populate.cpio.gz \
-    -drive file="$TEMP_DISK",if=none,id=hd,format=qcow2 \
-    -device virtio-blk-device,drive=hd \
-    -append "console=ttyS0" \
-    -nographic || true
+	-M virt \
+	-cpu rv64 \
+	-smp 2 \
+	-m 2G \
+	-kernel "$KERNEL" \
+	-initrd /tmp/populate.cpio.gz \
+	-drive file="$TEMP_DISK",if=none,id=hd,format=qcow2 \
+	-device virtio-blk-device,drive=hd \
+	-append "console=ttyS0" \
+	-nographic || true
 
 echo ""
 echo "Moving disk to final location..."

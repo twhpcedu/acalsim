@@ -9,15 +9,15 @@ SOCKET_PATH="/tmp/qemu-sst-llama.sock"
 NETWORK_SOCKET="/tmp/qemu-network.sock"
 
 exec $QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp 4 \
-    -m 8G \
-    -kernel "$KERNEL" \
-    -append "console=ttyS0 earlycon=sbi root=/dev/vda rw" \
-    -drive file="$ROOTFS_DISK",if=none,id=rootfs,format=qcow2 \
-    -device virtio-blk-device,drive=rootfs \
-    -netdev socket,id=net0,listen=:1234 \
-    -device virtio-net-device,netdev=net0 \
-    -device virtio-sst-device,socket=$SOCKET_PATH \
-    -nographic
+	-M virt \
+	-cpu rv64 \
+	-smp 4 \
+	-m 8G \
+	-kernel "$KERNEL" \
+	-append "console=ttyS0 earlycon=sbi root=/dev/vda rw" \
+	-drive file="$ROOTFS_DISK",if=none,id=rootfs,format=qcow2 \
+	-device virtio-blk-device,drive=rootfs \
+	-netdev socket,id=net0,listen=:1234 \
+	-device virtio-net-device,netdev=net0 \
+	-device virtio-sst-device,socket=$SOCKET_PATH \
+	-nographic

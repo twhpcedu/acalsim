@@ -17,7 +17,7 @@ cd "$INITRAMFS_DIR"
 mkdir -p bin sbin etc proc sys dev tmp root
 
 # Create init script
-cat > init << 'EOF'
+cat >init <<'EOF'
 #!/bin/sh
 
 # Mount essential filesystems
@@ -45,34 +45,34 @@ chmod +x init
 
 # Check if busybox is available
 if command -v busybox >/dev/null 2>&1; then
-    echo "Using system busybox..."
-    cp $(which busybox) bin/busybox
+	echo "Using system busybox..."
+	cp $(which busybox) bin/busybox
 else
-    echo "ERROR: busybox not found. Installing..."
-    sudo apt-get update -qq
-    sudo apt-get install -y busybox-static
-    cp /bin/busybox bin/busybox
+	echo "ERROR: busybox not found. Installing..."
+	sudo apt-get update -qq
+	sudo apt-get install -y busybox-static
+	cp /bin/busybox bin/busybox
 fi
 
 # Create busybox symlinks
 cd bin
 for cmd in sh ls cat echo mount umount ps kill reboot poweroff; do
-    ln -sf busybox $cmd
+	ln -sf busybox $cmd
 done
 cd ..
 
 # Create basic device nodes (if running as root)
 if [ "$(id -u)" = "0" ]; then
-    mknod -m 666 dev/null c 1 3
-    mknod -m 666 dev/zero c 1 5
-    mknod -m 666 dev/tty c 5 0
-    mknod -m 666 dev/console c 5 1
-    mknod -m 666 dev/ttyS0 c 4 64
+	mknod -m 666 dev/null c 1 3
+	mknod -m 666 dev/zero c 1 5
+	mknod -m 666 dev/tty c 5 0
+	mknod -m 666 dev/console c 5 1
+	mknod -m 666 dev/ttyS0 c 4 64
 fi
 
 # Create initramfs
 echo "Creating initramfs archive..."
-find . -print0 | cpio --null -ov --format=newc | gzip -9 > "$OUTPUT"
+find . -print0 | cpio --null -ov --format=newc | gzip -9 >"$OUTPUT"
 
 echo ""
 echo "Initramfs created: $OUTPUT"

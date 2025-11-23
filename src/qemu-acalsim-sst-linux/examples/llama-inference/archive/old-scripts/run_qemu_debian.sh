@@ -15,14 +15,14 @@ echo "  Password: root"
 echo ""
 
 exec $QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp 4 \
-    -m 8G \
-    -kernel "$KERNEL" \
-    -initrd "$DEBIAN_INITRAMFS" \
-    -append "console=ttyS0" \
-    -netdev user,id=net0 \
-    -device virtio-net-device,netdev=net0 \
-    -device virtio-sst-device,socket=$SOCKET_PATH \
-    -nographic
+	-M virt \
+	-cpu rv64 \
+	-smp 4 \
+	-m 8G \
+	-kernel "$KERNEL" \
+	-initrd "$DEBIAN_INITRAMFS" \
+	-append "console=ttyS0" \
+	-netdev user,id=net0 \
+	-device virtio-net-device,netdev=net0 \
+	-device virtio-sst-device,socket=$SOCKET_PATH \
+	-nographic

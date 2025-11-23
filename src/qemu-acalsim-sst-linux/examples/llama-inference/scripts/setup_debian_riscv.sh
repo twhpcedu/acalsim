@@ -33,8 +33,8 @@ echo ""
 read -p "Continue? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted"
-    exit 1
+	echo "Aborted"
+	exit 1
 fi
 
 # Configuration
@@ -63,19 +63,19 @@ mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
 if [ -d "$ROOTFS_DIR" ]; then
-    echo -e "${YELLOW}⚠${NC}  Rootfs directory exists"
-    read -p "Remove and rebuild? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        sudo rm -rf "$ROOTFS_DIR"
-    else
-        echo "Using existing rootfs, jumping to initramfs creation..."
-        cd "$ROOTFS_DIR"
-        sudo find . -print0 | sudo cpio --null -o --format=newc | gzip -9 > "$INITRAMFS"
-        INITRAMFS_SIZE=$(du -h "$INITRAMFS" | cut -f1)
-        echo -e "${GREEN}✓${NC} Initramfs created from existing rootfs: $INITRAMFS_SIZE"
-        exit 0
-    fi
+	echo -e "${YELLOW}⚠${NC}  Rootfs directory exists"
+	read -p "Remove and rebuild? (y/N) " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		sudo rm -rf "$ROOTFS_DIR"
+	else
+		echo "Using existing rootfs, jumping to initramfs creation..."
+		cd "$ROOTFS_DIR"
+		sudo find . -print0 | sudo cpio --null -o --format=newc | gzip -9 >"$INITRAMFS"
+		INITRAMFS_SIZE=$(du -h "$INITRAMFS" | cut -f1)
+		echo -e "${GREEN}✓${NC} Initramfs created from existing rootfs: $INITRAMFS_SIZE"
+		exit 0
+	fi
 fi
 
 echo "Running debootstrap (this will take 20-40 minutes)..."
@@ -91,21 +91,21 @@ PACKAGES="$PACKAGES,openssh-server,sudo,locales"
 
 # Use --no-check-gpg to bypass GPG issues
 sudo debootstrap \
-    --no-check-gpg \
-    --arch=riscv64 \
-    --include=$PACKAGES \
-    --variant=minbase \
-    sid \
-    "$ROOTFS_DIR" \
-    https://deb.debian.org/debian-ports
+	--no-check-gpg \
+	--arch=riscv64 \
+	--include=$PACKAGES \
+	--variant=minbase \
+	sid \
+	"$ROOTFS_DIR" \
+	https://deb.debian.org/debian-ports
 
 if [ $? -ne 0 ]; then
-    echo ""
-    echo -e "${RED}✗${NC} debootstrap failed"
-    echo ""
-    echo "Cleaning up and exiting..."
-    sudo rm -rf "$ROOTFS_DIR"
-    exit 1
+	echo ""
+	echo -e "${RED}✗${NC} debootstrap failed"
+	echo ""
+	echo "Cleaning up and exiting..."
+	sudo rm -rf "$ROOTFS_DIR"
+	exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Base Debian rootfs created"
@@ -115,7 +115,7 @@ echo ""
 echo "Installing development tools..."
 
 # Configure apt sources
-sudo tee "$ROOTFS_DIR/etc/apt/sources.list" > /dev/null << 'APTEOF'
+sudo tee "$ROOTFS_DIR/etc/apt/sources.list" >/dev/null <<'APTEOF'
 deb https://deb.debian.org/debian-ports sid main contrib non-free
 deb https://deb.debian.org/debian-ports unstable main
 APTEOF
@@ -152,7 +152,7 @@ sudo chroot "$ROOTFS_DIR" /bin/bash -c "echo 'root:root' | chpasswd"
 sudo sh -c "echo 'debian-riscv' > $ROOTFS_DIR/etc/hostname"
 
 # Configure network
-sudo tee "$ROOTFS_DIR/etc/network/interfaces" > /dev/null << 'NETEOF'
+sudo tee "$ROOTFS_DIR/etc/network/interfaces" >/dev/null <<'NETEOF'
 auto lo
 iface lo inet loopback
 
@@ -161,14 +161,14 @@ iface eth0 inet dhcp
 NETEOF
 
 # Create fstab
-sudo tee "$ROOTFS_DIR/etc/fstab" > /dev/null << 'FSTABEOF'
+sudo tee "$ROOTFS_DIR/etc/fstab" >/dev/null <<'FSTABEOF'
 proc            /proc           proc    defaults        0       0
 sysfs           /sys            sysfs   defaults        0       0
 tmpfs           /tmp            tmpfs   defaults        0       0
 FSTABEOF
 
 # Configure DNS
-sudo tee "$ROOTFS_DIR/etc/resolv.conf" > /dev/null << 'DNSEOF'
+sudo tee "$ROOTFS_DIR/etc/resolv.conf" >/dev/null <<'DNSEOF'
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 DNSEOF
@@ -183,15 +183,15 @@ echo ""
 
 echo "Creating compressed initramfs..."
 cd "$ROOTFS_DIR"
-sudo find . -print0 | sudo cpio --null -o --format=newc | gzip -9 > "$INITRAMFS"
+sudo find . -print0 | sudo cpio --null -o --format=newc | gzip -9 >"$INITRAMFS"
 
 if [ -f "$INITRAMFS" ]; then
-    INITRAMFS_SIZE=$(du -h "$INITRAMFS" | cut -f1)
-    echo -e "${GREEN}✓${NC} Initramfs created: $INITRAMFS"
-    echo "  Size: $INITRAMFS_SIZE"
+	INITRAMFS_SIZE=$(du -h "$INITRAMFS" | cut -f1)
+	echo -e "${GREEN}✓${NC} Initramfs created: $INITRAMFS"
+	echo "  Size: $INITRAMFS_SIZE"
 else
-    echo -e "${RED}✗${NC} Failed to create initramfs"
-    exit 1
+	echo -e "${RED}✗${NC} Failed to create initramfs"
+	exit 1
 fi
 
 echo ""

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fix PyTorch for Python 3.13 compatibility
 
-cat << 'INSTRUCTIONS'
+cat <<'INSTRUCTIONS'
 =====================================
 PyTorch Python 3.13 Compatibility Fix
 =====================================

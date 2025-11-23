@@ -79,7 +79,7 @@ class SSTResponse:
 
 		# Parse header
 		(resp.status, resp.request_id, resp.user_data, resp.payload_size) = \
-                                                struct.unpack('<IQQI', data[:28])
+                                                      struct.unpack('<IQQI', data[:28])
 
 		# Extract payload if present
 		if resp.payload_size > 0 and len(data) >= 28 + resp.payload_size:

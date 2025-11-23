@@ -10,14 +10,14 @@ SOCKET_PATH="/tmp/qemu-sst-llama.sock"
 
 # Shared folder configuration
 # Change these paths to match your host directories
-SHARED_HOST_DIR="/home/user/shared"      # Host directory to share
-SHARED_MOUNT_TAG="hostshare"              # Tag name for the share
+SHARED_HOST_DIR="/home/user/shared" # Host directory to share
+SHARED_MOUNT_TAG="hostshare"        # Tag name for the share
 
 if [ ! -f "$DEBIAN_DISK" ]; then
-    echo "Error: DQIB Debian disk not found at: $DEBIAN_DISK"
-    echo ""
-    echo "Please download it first - see documentation"
-    exit 1
+	echo "Error: DQIB Debian disk not found at: $DEBIAN_DISK"
+	echo ""
+	echo "Please download it first - see documentation"
+	exit 1
 fi
 
 # Create shared directory if it doesn't exist
@@ -43,19 +43,19 @@ echo "======================================"
 echo ""
 
 exec $QEMU_BIN \
-    -M virt \
-    -cpu rv64 \
-    -smp 4 \
-    -m 32G \
-    -kernel "$KERNEL" \
-    -initrd "$INITRD" \
-    -append "root=/dev/vda1 rootwait console=ttyS0" \
-    -drive file="$DEBIAN_DISK",if=none,id=hd,format=qcow2 \
-    -device virtio-blk-device,drive=hd \
-    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
-    -device virtio-net-device,netdev=net0 \
-    -device virtio-sst-device,socket=$SOCKET_PATH \
-    -object rng-random,filename=/dev/urandom,id=rng \
-    -device virtio-rng-device,rng=rng \
-    -virtfs local,path=$SHARED_HOST_DIR,mount_tag=$SHARED_MOUNT_TAG,security_model=passthrough,id=hostshare \
-    -nographic
+	-M virt \
+	-cpu rv64 \
+	-smp 4 \
+	-m 32G \
+	-kernel "$KERNEL" \
+	-initrd "$INITRD" \
+	-append "root=/dev/vda1 rootwait console=ttyS0" \
+	-drive file="$DEBIAN_DISK",if=none,id=hd,format=qcow2 \
+	-device virtio-blk-device,drive=hd \
+	-netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
+	-device virtio-net-device,netdev=net0 \
+	-device virtio-sst-device,socket=$SOCKET_PATH \
+	-object rng-random,filename=/dev/urandom,id=rng \
+	-device virtio-rng-device,rng=rng \
+	-virtfs local,path=$SHARED_HOST_DIR,mount_tag=$SHARED_MOUNT_TAG,security_model=passthrough,id=hostshare \
+	-nographic

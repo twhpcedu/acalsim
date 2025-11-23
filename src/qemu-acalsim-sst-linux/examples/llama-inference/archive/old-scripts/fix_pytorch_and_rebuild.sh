@@ -85,8 +85,8 @@ echo ""
 echo "Build started at: $(date)"
 echo ""
 
-nohup python3 setup.py install > /tmp/pytorch_clang_build.log 2>&1 &
-echo $! > /tmp/pytorch_build.pid
+nohup python3 setup.py install >/tmp/pytorch_clang_build.log 2>&1 &
+echo $! >/tmp/pytorch_build.pid
 
 BUILD_PID=$!
 echo "Build process PID: $BUILD_PID"
@@ -95,25 +95,25 @@ echo ""
 # Wait a few seconds to check if build starts successfully
 sleep 5
 
-if ps -p $BUILD_PID > /dev/null; then
-    echo "✓ Build is running successfully!"
-    echo ""
-    echo "Monitor build progress with:"
-    echo "  tail -f /tmp/pytorch_clang_build.log"
-    echo ""
-    echo "Check if still running:"
-    echo "  ps -p $BUILD_PID"
-    echo ""
-    echo "Expected build time: 12-24 hours"
-    echo ""
-    echo "Latest build output:"
-    tail -20 /tmp/pytorch_clang_build.log
+if ps -p $BUILD_PID >/dev/null; then
+	echo "✓ Build is running successfully!"
+	echo ""
+	echo "Monitor build progress with:"
+	echo "  tail -f /tmp/pytorch_clang_build.log"
+	echo ""
+	echo "Check if still running:"
+	echo "  ps -p $BUILD_PID"
+	echo ""
+	echo "Expected build time: 12-24 hours"
+	echo ""
+	echo "Latest build output:"
+	tail -20 /tmp/pytorch_clang_build.log
 else
-    echo "✗ Build process stopped unexpectedly!"
-    echo ""
-    echo "Check log for errors:"
-    tail -50 /tmp/pytorch_clang_build.log
-    exit 1
+	echo "✗ Build process stopped unexpectedly!"
+	echo ""
+	echo "Check log for errors:"
+	tail -50 /tmp/pytorch_clang_build.log
+	exit 1
 fi
 
 echo ""

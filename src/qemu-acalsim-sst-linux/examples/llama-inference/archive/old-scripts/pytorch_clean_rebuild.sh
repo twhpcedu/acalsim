@@ -2,7 +2,7 @@
 # Complete PyTorch Clean and Rebuild Script for RISC-V
 # Run this inside Debian QEMU to fix SLEEF FMA errors
 
-cat << 'INSTRUCTIONS'
+cat <<'INSTRUCTIONS'
 =====================================
 PyTorch Complete Clean & Rebuild
 =====================================

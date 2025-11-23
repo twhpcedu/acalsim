@@ -4,7 +4,7 @@
 
 set -e
 
-cat << 'INSTRUCTIONS'
+cat <<'INSTRUCTIONS'
 =====================================
 PyTorch RISC-V Build Script
 =====================================

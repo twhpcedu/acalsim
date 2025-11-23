@@ -7,7 +7,7 @@ echo ""
 echo "Run these commands inside Debian as root to fix the"
 echo "'unable to resolve host debian' warning:"
 echo ""
-cat << 'FIXCMD'
+cat <<'FIXCMD'
 # Add hostname to /etc/hosts
 echo "127.0.0.1 debian" >> /etc/hosts
 
