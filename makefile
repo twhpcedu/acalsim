@@ -58,3 +58,6 @@ init: clean # Initialize the repository
 
 clean: # Clean built files
 	@rm -rf $(BUILD_DIR)
+
+regression-sst: # Run regression with SST integration enabled
+	@CMAKE_FLAGS="-DENABLE_SST=ON" python3 scripts/regression.py
