@@ -307,13 +307,22 @@ static const struct file_operations sst_fops = {
  * Initialize VirtQueues
  */
 int sst_init_vqs(struct sst_virt_device* sdev) {
-	struct virtqueue*     vqs[SST_VQ_MAX];
-	struct virtqueue_info vqs_info[SST_VQ_MAX] = {
-	    {"request", sst_response_done}, {"response", NULL}, {"event", sst_event_done}};
-	int ret;
+	struct virtqueue* vqs[SST_VQ_MAX];
+	vq_callback_t*    callbacks[SST_VQ_MAX];
+	const char*       names[SST_VQ_MAX];
+	int               ret;
 
-	/* Find and initialize virtqueues using new API */
-	ret = virtio_find_vqs(sdev->vdev, SST_VQ_MAX, vqs, vqs_info, NULL);
+	/* Setup queue callbacks */
+	callbacks[SST_VQ_REQUEST]  = sst_response_done; /* Callback when request completes */
+	callbacks[SST_VQ_RESPONSE] = NULL;              /* Response queue not used */
+	callbacks[SST_VQ_EVENT]    = sst_event_done;
+
+	names[SST_VQ_REQUEST]  = "request";
+	names[SST_VQ_RESPONSE] = "response";
+	names[SST_VQ_EVENT]    = "event";
+
+	/* Find and initialize virtqueues */
+	ret = virtio_find_vqs(sdev->vdev, SST_VQ_MAX, vqs, callbacks, names, NULL);
 	if (ret) {
 		pr_err("%s: Failed to find virtqueues: %d\n", SST_DRIVER_NAME, ret);
 		return ret;

@@ -1,13 +1,11 @@
 #!/bin/bash
-"""
-Launch SST Simulation for LLAMA 2 Inference
-
-This script sets up the SST environment and launches the simulation
-with the LLAMA accelerator configuration.
-
-Copyright 2023-2025 Playlab/ACAL
-Licensed under the Apache License, Version 2.0
-"""
+# Launch SST Simulation for LLAMA 2 Inference
+#
+# This script sets up the SST environment and launches the simulation
+# with the LLAMA accelerator configuration.
+#
+# Copyright 2023-2025 Playlab/ACAL
+# Licensed under the Apache License, Version 2.0
 
 # Exit on error
 set -e
@@ -33,7 +31,7 @@ else
 	echo ""
 	echo "To run inside Docker:"
 	echo "  docker exec -it acalsim-workspace bash"
-	echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference"
+	echo "  cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference/llama"
 	echo "  ./run_sst.sh"
 	echo ""
 	read -p "Continue anyway? (y/N) " -n 1 -r
@@ -46,11 +44,9 @@ fi
 
 # Set up SST environment
 if [ "$IN_DOCKER" = true ]; then
-	# Docker paths
 	export SST_CORE_HOME=${SST_CORE_HOME:-/home/user/projects/acalsim/sst-core/sst-core-install}
 	SST_CONFIG_FILE="sst_config_llama.py"
 else
-	# Local paths (adjust as needed)
 	export SST_CORE_HOME=${SST_CORE_HOME:-$HOME/projects/acalsim/sst-core/sst-core-install}
 	SST_CONFIG_FILE="sst_config_llama.py"
 fi
@@ -92,7 +88,7 @@ fi
 echo -e "${GREEN}✓${NC} SST configuration: $SST_CONFIG_FILE"
 echo ""
 
-# Check if SST components are built
+# Check SST components
 echo "Checking SST components..."
 if [ -d "$SST_CORE_HOME/lib/sstcore" ]; then
 	ACALSIM_LIB=$(find "$SST_CORE_HOME/lib/sstcore" -name "libacalsim.so" 2>/dev/null | head -1)
@@ -123,7 +119,9 @@ echo "Socket: /tmp/qemu-sst-llama.sock"
 echo ""
 echo "Next steps:"
 echo "  1. Wait for 'Waiting for QEMU to connect...'"
-echo "  2. In another terminal, run: ./run_qemu.sh"
+echo "  2. In another terminal, run one of:"
+echo "     - ./run_qemu_debian_dqib.sh (Debian with PyTorch)"
+echo "     - ../run_qemu_debian_dqib.sh (from llama/ folder)"
 echo ""
 echo "Press Ctrl+C to stop the simulation"
 echo ""

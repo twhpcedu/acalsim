@@ -14,217 +14,235 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# LLAMA 2 7B Inference Example with SST Integration
+# ACALSIM QEMU Debian RISC-V Workspace
 
-This example demonstrates running LLAMA 2 7B model inference on RISC-V Linux with SST accelerator integration.
+Pre-configured QEMU environment with Debian RISC-V and PyTorch 2.4.
 
 ## Quick Start
 
+### Option 1: Use Pre-built Docker Image (Recommended)
+
 ```bash
-# 1. Build and deploy
-make deploy
+# Pull from Docker Hub
+docker pull mibojobo/debian-pytorch-workspace:latest
 
-# 2. Start SST simulation (Terminal 1)
-./run_sst.sh
+# Run the container
+docker run -it --name pytorch-workspace \
+    -p 2222:2222 \
+    mibojobo/debian-pytorch-workspace:latest
 
-# 3. Start QEMU Linux (Terminal 2)
-./run_qemu.sh
+# Inside container, start QEMU
+cd /home/user/projects/acalsim/src/qemu-acalsim-sst-linux/examples/llama-inference
+./run_qemu_debian_dqib.sh
 
-# 4. In Linux, run inference
-cd /apps/llama-inference
-./llama_inference.py "Explain quantum computing"
+# From host, SSH into QEMU
+ssh -p 2222 debian@localhost
+# Password: debian
+
+# Verify PyTorch
+python3 -c "import torch; print(torch.__version__)"
 ```
 
-## Files
+### Option 2: Build from Scratch
 
-| File | Description |
-|------|-------------|
-| **llama_inference.py** | Main inference application |
-| **llama_sst_backend.py** | SST accelerator integration backend |
-| **sst_config_llama.py** | SST simulation configuration |
-| **run_sst.sh** | Launch SST simulation |
-| **run_qemu.sh** | Launch QEMU with model disk |
-| **test_prompts.txt** | Example prompts |
-| **Makefile** | Build and deployment |
+See [docs/BUILD_FROM_SCRATCH.md](docs/BUILD_FROM_SCRATCH.md)
 
-## Prerequisites
+## What's Included
 
-1. **Full Linux Root Filesystem** with Python 3.11+ and PyTorch
-   - See [PYTORCH_LLAMA_SETUP.md](../../PYTORCH_LLAMA_SETUP.md) for setup
+- ✅ **Debian RISC-V** (sid/unstable) with 100GB virtual disk
+- ✅ **Python 3.13.9**
+- ✅ **PyTorch 2.4.0** (compiled for RISC-V with all patches)
+- ✅ **QEMU 7.0.0** RISC-V emulator
+- ✅ **Development Tools**: GCC, Clang, CMake, Ninja, OpenBLAS
+- ✅ **Shared Folder**: `/mnt/shared` auto-mounted
+- ✅ **SSH Access**: Port 2222
 
-2. **LLAMA 2 7B Model** on virtual disk at `/mnt/models/llama-2-7b/`
-   - Download from Hugging Face (requires access request)
+## Directory Structure
 
-3. **SST Components** compiled with VirtIO device support
+```
+.
+├── README.md                       # This file
+├── run_qemu_debian_dqib.sh        # Main script to boot Debian
+├── run_qemu_initramfs.sh          # Boot with initramfs
+├── run_qemu.sh                    # General QEMU launcher
+├── scripts/                       # Setup and build scripts
+│   ├── download_debian_image.sh
+│   ├── install_pytorch_from_source.sh
+│   ├── setup_debian_riscv.sh
+│   ├── setup_buildroot_python.sh
+│   └── setup_persistent_*.sh
+├── llama/                         # LLaMA inference example
+│   ├── llama_inference.py
+│   ├── llama_sst_backend.py
+│   ├── sst_config_llama.py
+│   └── run_sst.sh
+├── docs/                          # Documentation
+└── archive/                       # Old/deprecated files
+```
 
 ## Usage
 
-### Basic Inference
+### Boot Debian QEMU
 
 ```bash
-./llama_inference.py "Your prompt here"
+./run_qemu_debian_dqib.sh
 ```
 
-### Batch Processing
+**Login credentials:**
+- User: `debian` / `debian`
+- Root: `root` / `root`
+
+**SSH access:**
+```bash
+ssh -p 2222 debian@localhost
+```
+
+### Access Shared Folder
+
+Files in `/home/user/projects` (Docker) are accessible at `/mnt/shared` (QEMU).
+
+**Example:**
+```bash
+# On host Mac
+echo "test" > /Users/weifen/work/acal/acalsim-workspace/projects/test.txt
+
+# In QEMU Debian
+cat /mnt/shared/test.txt
+```
+
+### Test PyTorch
 
 ```bash
-# Process all prompts from file
-cat test_prompts.txt | while read prompt; do
-    ./llama_inference.py "$prompt"
-done
+# SSH into QEMU
+ssh -p 2222 debian@localhost
+
+# Run Python test
+python3 << 'EOF'
+import torch
+print(f"PyTorch: {torch.__version__}")
+
+# Create tensors
+x = torch.tensor([1.0, 2.0, 3.0])
+y = torch.tensor([4.0, 5.0, 6.0])
+z = x + y
+
+print(f"Test: {z.tolist()}")
+print("✓ PyTorch is working!")
+EOF
 ```
 
-### With Custom Parameters
-
-```python
-# Edit llama_inference.py:
-outputs = model.generate(
-    inputs.input_ids,
-    max_new_tokens=200,  # Generate more tokens
-    temperature=0.8,      # More creative
-    top_p=0.95
-)
-```
-
-## SST Accelerator Configuration
-
-The example uses 4 specialized accelerators:
-
-| Accelerator | Type | Workload | Latency |
-|-------------|------|----------|---------|
-| `accel0` | Attention | Self-attention computation | 1μs |
-| `accel1` | FFN | Feed-forward network | 500ns |
-| `accel2` | Embedding | Token embeddings | 100ns |
-| `accel3` | General | Misc operations | 200ns |
-
-Edit `sst_config_llama.py` to adjust accelerator parameters.
-
-## Performance Metrics
-
-The application reports:
-
-- **Attention operations**: Count of self-attention calls
-- **FFN operations**: Count of feed-forward network calls
-- **Embedding operations**: Token embedding lookups
-- **Total simulated cycles**: Aggregate accelerator cycles
-- **Estimated wall-clock time**: Based on 2GHz clock
-
-Example output:
-
-```
-SST Accelerator Statistics:
-  Attention operations: 324
-  FFN operations: 324
-  Embedding operations: 1
-  Total simulated cycles: 1,234,567
-  Estimated wall-clock time: 0.617ms
-```
-
-## Customization
-
-### Use Different Model
-
-Edit `llama_inference.py`:
-
-```python
-MODEL_PATH = "/mnt/models/llama-2-13b"  # Larger model
-# or
-MODEL_PATH = "/mnt/models/tinyllama"     # Smaller model
-```
-
-### Change Accelerator Latency
-
-Edit `sst_config_llama.py`:
-
-```python
-"latency_attention": "100ns",  # 10x faster
-"latency_ffn": "50ns",
-```
-
-### Enable Quantization
-
-Edit `llama_inference.py`:
-
-```python
-from transformers import BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_PATH,
-    quantization_config=quantization_config
-)
-```
-
-## Troubleshooting
-
-See [PYTORCH_LLAMA_SETUP.md](../../PYTORCH_LLAMA_SETUP.md#troubleshooting) for detailed troubleshooting.
-
-### Quick Fixes
-
-**Model not found:**
-```bash
-# Check mount
-mount | grep models
-# Mount if needed
-mount /dev/vda /mnt/models
-```
-
-**SST device error:**
-```bash
-# Check device
-ls -l /dev/sst0
-# Load driver if needed
-insmod /virtio-sst.ko
-```
-
-**Out of memory:**
-```bash
-# Restart QEMU with more RAM
-# In run_qemu.sh: -m 8G
-```
-
-## Performance Tips
-
-1. **Use Quantization**: Reduce model size (13GB → 3.5GB)
-2. **Increase QEMU RAM**: `-m 8G` for larger models
-3. **Optimize SST Latency**: Tune accelerator parameters
-4. **Reduce Tokens**: Lower `max_new_tokens` for faster response
-
-## Example Session
+### Shutdown QEMU
 
 ```bash
-$ ./llama_inference.py "What is machine learning?"
+# From within QEMU
+sudo poweroff
 
-Loading model from /mnt/models/llama-2-7b...
-[████████████████████████████████] 100%
-Model loaded successfully
-
-Prompt: What is machine learning?
-Generating 100 tokens...
-[██████████████████████████......] 80%
-
-============================================================
-GENERATED TEXT:
-============================================================
-What is machine learning? Machine learning is a subset of
-artificial intelligence that enables computers to learn from
-data without being explicitly programmed. It involves training
-algorithms on datasets to identify patterns and make
-predictions or decisions...
-============================================================
-
-SST Accelerator Statistics:
-  Attention operations: 324
-  FFN operations: 324
-  Embedding operations: 1
-  Total simulated cycles: 1,234,567
-  Estimated wall-clock time: 0.617ms
-============================================================
+# Or from QEMU console
+# Press: Ctrl-A, then X
 ```
 
-## Related Documentation
+## System Requirements
 
-- [PYTORCH_LLAMA_SETUP.md](../../PYTORCH_LLAMA_SETUP.md) - Complete setup guide
-- [ROOTFS_MANAGEMENT.md](../../ROOTFS_MANAGEMENT.md) - Package installation
-- [APP_DEVELOPMENT.md](../../APP_DEVELOPMENT.md) - SST application development
+- **Docker**: Docker Desktop or Docker Engine
+- **Disk Space**: 100GB free
+- **RAM**: 32GB recommended (minimum 16GB)
+- **CPU**: 4+ cores recommended
+
+## Documentation
+
+- **[Build from Scratch](docs/BUILD_FROM_SCRATCH.md)** - Complete build guide
+- **[Shared Folders](docs/SHARED_FOLDERS.md)** - Setup and usage
+- **[PyTorch Guide](docs/PYTORCH_RISCV.md)** - PyTorch on RISC-V
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues
+
+## LLaMA Inference Example
+
+This directory also contains a LLaMA inference example using SST backend:
+
+```bash
+cd llama/
+./run_sst.sh
+```
+
+See `llama/README.md` for details.
+
+## Advanced Usage
+
+### Mount Additional Folders
+
+Edit `run_qemu_debian_dqib.sh` and add more virtfs mounts:
+
+```bash
+-virtfs local,path=/host/path,mount_tag=mytag,security_model=passthrough,id=myid
+```
+
+Then in QEMU:
+```bash
+sudo mount -t 9p -o trans=virtio mytag /mnt/mydir
+```
+
+### Increase Memory/CPU
+
+Edit `run_qemu_debian_dqib.sh`:
+```bash
+-smp 8       # 8 CPU cores
+-m 64G       # 64GB RAM
+```
+
+### Network Port Forwarding
+
+Add more port forwards in `run_qemu_debian_dqib.sh`:
+```bash
+-netdev user,id=net0,hostfwd=tcp:127.0.0.1:8080-:80,hostfwd=tcp:127.0.0.1:2222-:22
+```
+
+## Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+## Issues
+
+Report issues at: https://github.com/yourusername/acalsim-debian-pytorch-workspace/issues
+
+## License
+
+[Your License Here]
+
+## Citation
+
+If you use this in your research:
+
+```bibtex
+@software{acalsim_pytorch_workspace,
+  title = {ACALSIM Debian PyTorch RISC-V Workspace},
+  author = {Your Name},
+  year = {2025},
+  url = {https://hub.docker.com/r/mibojobo/debian-pytorch-workspace}
+}
+```
+
+## Credits
+
+- **Debian RISC-V**: Debian Quick Image Builder (DQIB)
+- **QEMU**: QEMU Project
+- **PyTorch**: PyTorch Team
+- **RISC-V**: RISC-V International
+
+## Version History
+
+### v1.0.0 (2025-11-23)
+- Initial release
+- Debian RISC-V (sid)
+- Python 3.13.9
+- PyTorch 2.4.0
+- QEMU 7.0.0
+- Shared folder support
+- SSH access configured
+
+---
+
+**Status**: Production Ready ✅
+**Last Updated**: 2025-11-23

@@ -300,20 +300,29 @@ static const struct file_operations sst_fops = {
     .write          = sst_write,
     .unlocked_ioctl = sst_ioctl,
     .poll           = sst_poll,
-    .llseek         = noop_llseek,
+    .llseek         = no_llseek,
 };
 
 /*
  * Initialize VirtQueues
  */
 int sst_init_vqs(struct sst_virt_device* sdev) {
-	struct virtqueue*     vqs[SST_VQ_MAX];
-	struct virtqueue_info vqs_info[SST_VQ_MAX] = {
-	    {"request", sst_response_done}, {"response", NULL}, {"event", sst_event_done}};
-	int ret;
+	struct virtqueue* vqs[SST_VQ_MAX];
+	vq_callback_t*    callbacks[SST_VQ_MAX];
+	const char*       names[SST_VQ_MAX];
+	int               ret;
 
-	/* Find and initialize virtqueues using new API */
-	ret = virtio_find_vqs(sdev->vdev, SST_VQ_MAX, vqs, vqs_info, NULL);
+	/* Setup queue callbacks */
+	callbacks[SST_VQ_REQUEST]  = sst_response_done; /* Callback when request completes */
+	callbacks[SST_VQ_RESPONSE] = NULL;              /* Response queue not used */
+	callbacks[SST_VQ_EVENT]    = sst_event_done;
+
+	names[SST_VQ_REQUEST]  = "request";
+	names[SST_VQ_RESPONSE] = "response";
+	names[SST_VQ_EVENT]    = "event";
+
+	/* Find and initialize virtqueues */
+	ret = virtio_find_vqs(sdev->vdev, SST_VQ_MAX, vqs, callbacks, names, NULL);
 	if (ret) {
 		pr_err("%s: Failed to find virtqueues: %d\n", SST_DRIVER_NAME, ret);
 		return ret;
@@ -380,7 +389,7 @@ int sst_probe(struct virtio_device* vdev) {
 	sst_read_config(sdev);
 
 	/* Allocate character device minor number */
-	minor = ida_alloc_range(&sst_minor_ida, SST_MINOR_BASE, SST_MINOR_BASE + SST_MAX_DEVICES - 1, GFP_KERNEL);
+	minor = ida_simple_get(&sst_minor_ida, SST_MINOR_BASE, SST_MINOR_BASE + SST_MAX_DEVICES, GFP_KERNEL);
 	if (minor < 0) {
 		ret = minor;
 		pr_err("%s: Failed to allocate minor number: %d\n", SST_DRIVER_NAME, ret);
@@ -418,7 +427,7 @@ int sst_probe(struct virtio_device* vdev) {
 fail_device:
 	cdev_del(&sdev->cdev);
 fail_cdev:
-	ida_free(&sst_minor_ida, minor);
+	ida_simple_remove(&sst_minor_ida, minor);
 fail_minor:
 	sst_del_vqs(sdev);
 fail_vqs:
@@ -444,7 +453,7 @@ void sst_remove(struct virtio_device* vdev) {
 	cdev_del(&sdev->cdev);
 
 	/* Free minor number */
-	ida_free(&sst_minor_ida, sdev->minor);
+	ida_simple_remove(&sst_minor_ida, sdev->minor);
 
 	/* Delete virtqueues */
 	vdev->config->reset(vdev);
@@ -504,7 +513,7 @@ static int __init sst_init(void) {
 	}
 
 	/* Create device class */
-	sst_class = class_create(SST_DRIVER_NAME);
+	sst_class = class_create(THIS_MODULE, SST_DRIVER_NAME);
 	if (IS_ERR(sst_class)) {
 		ret = PTR_ERR(sst_class);
 		pr_err("%s: Failed to create class: %d\n", SST_DRIVER_NAME, ret);

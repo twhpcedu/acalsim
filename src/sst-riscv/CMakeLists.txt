@@ -43,14 +43,14 @@ message(STATUS "Found sst-config: ${SST_CONFIG}")
 # Get SST compiler flags
 execute_process(
     COMMAND ${SST_CONFIG} --ELEMENT_CXXFLAGS
-    OUTPUT_VARIABLE SST_CXXFLAGS
+    OUTPUT_VARIABLE SST_CXXFLAGS_RAW
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
 # Get SST linker flags
 execute_process(
     COMMAND ${SST_CONFIG} --ELEMENT_LDFLAGS
-    OUTPUT_VARIABLE SST_LDFLAGS
+    OUTPUT_VARIABLE SST_LDFLAGS_RAW
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
@@ -61,9 +61,21 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
+# Separate the flags into lists
+separate_arguments(SST_CXXFLAGS UNIX_COMMAND "${SST_CXXFLAGS_RAW}")
+separate_arguments(SST_LDFLAGS UNIX_COMMAND "${SST_LDFLAGS_RAW}")
+
+# Filter out -I flags from CXXFLAGS (we handle includes separately)
+set(SST_COMPILE_FLAGS "")
+foreach(flag ${SST_CXXFLAGS})
+    if(NOT flag MATCHES "^-I")
+        list(APPEND SST_COMPILE_FLAGS ${flag})
+    endif()
+endforeach()
+
 message(STATUS "SST prefix: ${SST_PREFIX}")
-message(STATUS "SST CXXFLAGS: ${SST_CXXFLAGS}")
-message(STATUS "SST LDFLAGS: ${SST_LDFLAGS}")
+message(STATUS "SST CXXFLAGS: ${SST_CXXFLAGS_RAW}")
+message(STATUS "SST LDFLAGS: ${SST_LDFLAGS_RAW}")
 
 # ========== Find ACALSim ==========
 
@@ -99,7 +111,7 @@ endif()
 # ========== SST Element Library ==========
 
 # Source files
-set(SOURCES ACALSimComponent.cc)
+set(SOURCES ACALSimComponent.cc RISCVSoCComponent.cc RISCVSoCStandalone.cc)
 
 # Create shared library
 add_library(acalsim_sst SHARED ${SOURCES})
@@ -108,6 +120,7 @@ add_library(acalsim_sst SHARED ${SOURCES})
 target_include_directories(
     acalsim_sst
     PRIVATE
+        ${SST_PREFIX}/include
         ${ACALSIM_INCLUDE}
         ${ACALSIM_INCLUDE}/external
         ${ACALSIM_INCLUDE}/sim
@@ -115,13 +128,17 @@ target_include_directories(
         ${ACALSIM_INCLUDE}/packet
         ${ACALSIM_INCLUDE}/port
         ${ACALSIM_INCLUDE}/channel
+        ${ACALSIM_ROOT}/third-party/cpp-channel/include
+        ${ACALSIM_ROOT}/third-party/json/include
+        ${ACALSIM_ROOT}/third-party/CLI11/include
+        ${ACALSIM_ROOT}/src/riscv/include
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Compiler flags
 target_compile_options(
     acalsim_sst
-    PRIVATE -Wall -Wextra -O2 -g ${SST_CXXFLAGS}
+    PRIVATE -Wall -Wextra -O2 -g ${SST_COMPILE_FLAGS}
 )
 
 # Linker flags
