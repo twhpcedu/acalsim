@@ -85,7 +85,12 @@ void TaskManagerV1<T>::scheduler(const size_t _tidx) {
 	// flag will be set in the last iteration
 	bool readyToTerminate = false;
 
-	while (!this->getThreadManager()->isRunning()) { ; }
+	// Wait until ThreadManager signals that simulation is running
+	// This replaces the busy-wait spin loop to reduce context switches
+	{
+		std::unique_lock<std::mutex> lock(this->runningMutex);
+		this->runningCondVar.wait(lock, [this] { return this->getThreadManager()->isRunning(); });
+	}
 
 	// Set the thread status from the inActive state to the Ready state
 	this->setWorkerStatus(tid, ThreadStatus::Ready);

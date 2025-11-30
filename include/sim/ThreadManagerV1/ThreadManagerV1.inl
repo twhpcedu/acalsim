@@ -37,6 +37,17 @@ void ThreadManagerV1<T>::startSimThreads() {
 }
 
 template <typename T>
+void ThreadManagerV1<T>::startRunning() {
+	// Set the running flag first (via base class)
+	this->running = true;
+
+	// Notify all waiting worker threads that simulation is now running
+	// This wakes threads from the condition variable wait (replaces busy-wait spin loop)
+	{ std::lock_guard<std::mutex> lock(this->getTaskManager()->runningMutex); }
+	this->getTaskManager()->runningCondVar.notify_all();
+}
+
+template <typename T>
 void ThreadManagerV1<T>::runInterIterationUpdate() {
 	for (auto& sim : this->simulators) {
 		if (sim->interIterationUpdate()) {
@@ -91,6 +102,9 @@ void ThreadManagerV1<T>::startPhase1() {
 	this->phase1IdleTimer.startStage();
 #endif  // ACALSIM_STATISTICS
 
+	// Wake all waiting threads to start the phase
+	// Note: notify_one() optimization was attempted but causes issues when
+	// threads haven't entered the wait state yet on the first iteration
 	this->getTaskManager()->newTaskAvailableCondVar.notify_all();
 }
 

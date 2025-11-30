@@ -429,7 +429,7 @@ public:
 	 * @brief Set thread manager to running state
 	 * @note Call before starting simulation loop
 	 */
-	void startRunning() { running = true; }
+	virtual void startRunning() { running = true; }
 
 #ifdef ACALSIM_STATISTICS
 	/** @brief Get number of tasks executed per iteration */

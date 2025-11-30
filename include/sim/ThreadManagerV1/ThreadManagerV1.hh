@@ -39,6 +39,11 @@ public:
 
 	void startSimThreads() override;
 
+	/**
+	 * @brief Override to notify workers waiting on the running condition variable
+	 */
+	void startRunning() override;
+
 	// Pre-Simulation Initialization
 	void preSimInit() override {}
 

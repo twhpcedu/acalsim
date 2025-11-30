@@ -196,6 +196,8 @@
 
 #include "sim/SimTop.hh"
 
+#include <sys/resource.h>
+
 #include <atomic>
 #include <exception>
 #include <sstream>
@@ -233,6 +235,9 @@
 #include "utils/Logging.hh"
 
 namespace acalsim {
+
+// Context switch measurement
+static struct rusage g_rusage_start;
 
 // A global variable for others to access the common variable
 std::shared_ptr<SimTopBase> top = nullptr;
@@ -319,6 +324,9 @@ void SimTopBase::init(int argc, char** argv) {
 
 	// toggle all dual channel status
 	SimChannelGlobal::toggleChannelDualQueueStatus();
+
+	// Record context switches at simulation start
+	getrusage(RUSAGE_SELF, &g_rusage_start);
 }
 
 void SimTopBase::run() {
@@ -489,6 +497,15 @@ void SimTopBase::run() {
 }
 
 void SimTopBase::finish() {
+	// Report context switches during simulation
+	struct rusage rusage_end;
+	getrusage(RUSAGE_SELF, &rusage_end);
+	long voluntary_cs   = rusage_end.ru_nvcsw - g_rusage_start.ru_nvcsw;
+	long involuntary_cs = rusage_end.ru_nivcsw - g_rusage_start.ru_nivcsw;
+	std::cout << "\n[SimTopBase] Context Switches during simulation:\n";
+	std::cout << "[SimTopBase]   Voluntary context switches: " << voluntary_cs << "\n";
+	std::cout << "[SimTopBase]   Involuntary context switches: " << involuntary_cs << "\n";
+
 	MT_DEBUG_CLASS_INFO << "Simulation finish.";
 
 	// Post-Simulation clean up

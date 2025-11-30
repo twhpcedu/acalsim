@@ -124,6 +124,14 @@ protected:
 	std::condition_variable_any newTaskAvailableCondVar;
 	std::atomic<bool>           startPhase1;
 
+	// Condition variable for worker threads to wait until ThreadManager is running
+	std::condition_variable runningCondVar;
+	std::mutex              runningMutex;
+
+	// Counter for threads currently sleeping/waiting on newTaskAvailableCondVar
+	// Used to optimize notify_all -> notify_one to reduce thundering herd
+	std::atomic<int> nSleepingThreads{0};
+
 	// flag for pending inbound requests in the framework
 	bool pendingInboundRequests;
 
