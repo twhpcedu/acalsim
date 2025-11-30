@@ -156,42 +156,51 @@ The larger improvement with more threads is expected because:
 2. The thundering herd effect from `notify_all()` is more pronounced with more threads
 3. With fewer tasks than threads (3 simulators vs 8 threads), more threads were spinning in the busy-wait loop
 
-## Future Optimization Opportunities
+## Rejected Optimizations
 
-### 1. notify_one() with Sleep Tracking (Not Implemented)
+The following optimizations were implemented and tested but did not provide meaningful improvement:
 
-An attempt was made to replace `notify_all()` with `notify_one()` calls to reduce thundering herd:
+### 1. notify_one() with Sleep Tracking
 
-```cpp
-// Track sleeping threads
-std::atomic<int> nSleepingThreads{0};
+An optimization using `notify_one()` with an atomic sleep counter was attempted but caused a regression (increased context switches from ~193 to ~284). The implementation tracked sleeping threads and called `notify_one()` in a loop instead of `notify_all()`. However, the overhead of atomic operations and the behavior of `notify_one()` calls in rapid succession negated any benefits from reducing the thundering herd effect.
 
-// In wait path:
-nSleepingThreads.fetch_add(1);
-condvar.wait(...);
-nSleepingThreads.fetch_sub(1);
+### 2. Fast Path hasReadyTask Check
 
-// In startPhase1:
-int nSleeping = nSleepingThreads.load();
-for (int i = 0; i < nSleeping; ++i) {
-    condvar.notify_one();
-}
-```
+A `hasReadyTaskFast()` method was added to skip `processUpdates()` when the heap is known to be valid (e.g., immediately after `push()`). Testing showed this optimization was within measurement variance (~195-229 vs ~193-236 voluntary CS) and did not provide meaningful context switch reduction.
 
-**Issue**: This caused deadlocks when:
-- First phase starts before threads enter wait state
-- Sleep counter shows 0, so no threads are notified
-- Threads then enter wait but miss the notification
+### 3. Combined extractTop() Operation
 
-**Mitigation**: A fallback to `notify_all()` when `nSleepingThreads == 0` was tried but still had timing issues.
+A combined `extractTop()` method was added to merge `top()` and `pop()` operations, avoiding redundant `processUpdates()` calls. Like the fast path optimization, testing showed results were within measurement variance and did not provide meaningful context switch reduction.
 
-### 2. Lock-Free Task Queue
+### 4. ThreadManagerV6 (Fine-Grained Locking)
 
-Replace the mutex-protected priority queue with a lock-free data structure to reduce lock contention.
+ThreadManagerV6 uses `shared_mutex` (reader-writer locks) and atomic operations for priority updates. Benchmark results showed no improvement over V1:
 
-### 3. Work-Stealing Scheduler
+| ThreadManager | Average CS | Range |
+|--------------|------------|-------|
+| V1 | 236 | 222-245 |
+| V6 | 242 | 208-267 |
 
-Implement per-thread task queues with work-stealing to reduce global synchronization.
+V6 actually showed slightly worse performance and significantly higher variance. The overhead of `shared_mutex` and complex concurrent heap operations negates any benefit from allowing concurrent reads.
+
+### 5. Per-Simulator Partitioned Queues (Not Applicable)
+
+This approach was considered but is not applicable to ACALSim's architecture:
+- SimBases are dynamically mapped to threads (not fixed affinity)
+- Tasks are dynamically activated based on `next_execution_cycle`
+- Global priority ordering is required across all simulators
+- Partitioning would break the priority guarantee
+
+## Architectural Limitations
+
+The current optimization (~36% reduction) may be near the practical limit given these constraints:
+
+1. **Thundering herd**: `notify_all()` is required because any thread can execute any ready task
+2. **Global priority ordering**: All threads must see the same priority order
+3. **Two-phase synchronization**: Phase boundaries require all threads to synchronize
+4. **Few tasks, many threads**: 3 simulators with 8 threads means most threads often find no work
+
+Further significant improvements would likely require architectural changes to the simulation model itself.
 
 ## Measuring Context Switches
 
