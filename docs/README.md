@@ -188,16 +188,62 @@ Full Linux OS running on RISC-V with VirtIO device driver for SST communication:
 - **HSA Multi-Accelerator Demo**: Example application controlling 4 AI accelerators in parallel
 - **API-driven**: Standard Linux system calls for accelerator control
 
+### PyTorch-ACALSim Backend
+
+Custom TorchDynamo backend that compiles PyTorch models to run on ACALSim accelerator simulation:
+
+| Document | Description |
+|----------|-------------|
+| [Backend README](../src/pytorch-acalsim-backend/README.md) | Quick start and API reference |
+| [Full Tutorial](./tutorials/pytorch-acalsim-backend-tutorial.md) | Complete flow from PyTorch to QEMU-SST |
+
+**Location**: `src/pytorch-acalsim-backend/`
+
+**Key Features**:
+- **torch.compile() Integration**: Use standard PyTorch API with custom backend
+- **FX Graph Capture**: TorchDynamo captures computation graphs automatically
+- **ACALSim IR**: Intermediate representation for accelerator operations
+- **RISC-V Code Generation**: Generates bare-metal C code for cross-compilation
+- **MMIO Communication**: Generated code communicates with SST via memory-mapped I/O
+
+**Workflow**:
+```
+PyTorch Model → TorchDynamo → ACALSim IR → RISC-V C Code → QEMU-SST Simulation
+```
+
+**Example Usage**:
+```python
+import torch
+from acalsim_backend import ACALSimBackend
+
+model = torch.nn.Linear(16, 10)
+backend = ACALSimBackend(mode="codegen", output_dir="./output")
+compiled = torch.compile(model, backend=backend)
+output = compiled(torch.randn(4, 16))
+```
+
 ### Comparison of SST Integration Approaches
 
-| Feature | Baremetal (MMIO) | Baremetal (HSA) | Linux (VirtIO) |
-|---------|------------------|-----------------|----------------|
-| **OS Overhead** | None | None | ✅ Modeled |
-| **Development Speed** | ✅ Fast | ✅ Fast | Slower |
-| **Realism** | Basic | Medium | ✅ Production-like |
-| **Use Case** | Early HW dev | Accelerator testing | SW/HW co-design |
-| **Standard APIs** | Custom MMIO | HSA-like | ✅ Linux syscalls |
-| **Multi-process** | No | No | ✅ Supported |
+| Feature | Baremetal (MMIO) | Baremetal (HSA) | Linux (VirtIO) | PyTorch Backend |
+|---------|------------------|-----------------|----------------|-----------------|
+| **OS Overhead** | None | None | ✅ Modeled | None |
+| **Development Speed** | ✅ Fast | ✅ Fast | Slower | ✅ Fastest |
+| **Realism** | Basic | Medium | ✅ Production-like | Basic |
+| **Use Case** | Early HW dev | Accelerator testing | SW/HW co-design | ML workload testing |
+| **Standard APIs** | Custom MMIO | HSA-like | ✅ Linux syscalls | ✅ PyTorch |
+| **Multi-process** | No | No | ✅ Supported | No |
+| **ML Framework** | Manual | Manual | Manual | ✅ PyTorch native |
+
+---
+
+## Tutorials
+
+Step-by-step tutorials for specific use cases:
+
+| Tutorial | Description |
+|----------|-------------|
+| [PyTorch-ACALSim Backend](./tutorials/pytorch-acalsim-backend-tutorial.md) | Complete flow from PyTorch models to QEMU-SST simulation |
+| [Custom SST Operators](../src/qemu-acalsim-sst-linux/docs/CUSTOM_SST_OPERATORS.md) | Create custom accelerator operators for SST |
 
 ---
 
@@ -211,8 +257,10 @@ Full Linux OS running on RISC-V with VirtIO device driver for SST communication:
 ## Documentation Versioning
 
 - **Current Version**: 0.1.0
-- **Last Updated**: November 2025
+- **Last Updated**: December 2025
 - **Major Changes**:
+  - December 2025: Added PyTorch-ACALSim Backend with tutorial
+  - December 2025: Added Custom SST Operators tutorial
   - November 2025: ThreadManager naming refactoring (V# → descriptive names)
   - November 2025: Added migration guide
   - November 2025: ExitEvent memory leak fix

@@ -1,0 +1,12 @@
+=== ACALSim IR: graph_0 ===
+
+Tensors:
+  input_0: (2, 4, 8) float32 [input]
+  input_1: (2, 8, 4) float32 [input]
+  t_2: (2, 4, 4) float32 [output]
+
+Operations:
+  0: t_2 = MATMUL(input_0, input_1)
+
+Inputs: ['input_0', 'input_1']
+Outputs: ['t_2']

@@ -73,6 +73,13 @@ We gratefully acknowledge the Industrial Technology Research Institute (ITRI) fo
 
 Welcome to visit our documentation [here](./docs/README.md).
 
+### Quick Links
+
+- **Getting Started**: [Environment Setup](https://acalsim.playlab.tw/docs/getting-started/env-setup)
+- **PyTorch Integration**: [PyTorch-ACALSim Backend Tutorial](./docs/tutorials/pytorch-acalsim-backend-tutorial.md) - Compile PyTorch models for accelerator simulation
+- **SST Integration**: [QEMU-SST Documentation](./docs/README.md#sst-integration-projects)
+- **API Reference**: [Core Concepts](./docs/README.md#core-concepts-for-users)
+
 ## Contributors
 
 - ACALSim Framework
