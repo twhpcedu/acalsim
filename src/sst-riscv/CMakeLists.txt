@@ -14,6 +14,8 @@
 
 cmake_minimum_required(VERSION 3.12)
 
+project(ACALSim_SST_Integration VERSION 1.0.0 LANGUAGES CXX)
+
 # Make SST integration optional
 option(ENABLE_SST "Enable SST integration" OFF)
 
@@ -21,8 +23,6 @@ if(NOT ENABLE_SST)
     message(STATUS "SST integration disabled (set -DENABLE_SST=ON to enable)")
     return()
 endif()
-
-project(ACALSim_SST_Integration VERSION 1.0.0 LANGUAGES CXX)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)

@@ -191,6 +191,39 @@ This approach was considered but is not applicable to ACALSim's architecture:
 - Global priority ordering is required across all simulators
 - Partitioning would break the priority guarantee
 
+### 6. SpinBarrier-Based Synchronization
+
+A SpinBarrier optimization was implemented to replace condition variable-based synchronization with spin-wait barriers, eliminating OS context switches during phase synchronization. The implementation used:
+- Platform-specific pause instructions (`_mm_pause()` on x86, `yield` on ARM64)
+- Exponential backoff to reduce power consumption while spinning
+- Consumer/producer barrier pattern for phase synchronization
+
+**Test Results on ACALSim (small workload with few simulators):**
+- Achieved ~72% reduction in voluntary context switches (from ~254 to ~70 for 8 threads)
+- Workload: 3 simulators, short predictable wait times
+
+**Test Results on HPCSim (large workload with many simulators):**
+
+| Metric | Without SpinBarrier | With SpinBarrier |
+|--------|---------------------|------------------|
+| Time (5000 cycles) | 1.63 seconds | 34.7 seconds (21x slower) |
+| CPU usage | 679% | 1489% |
+| User time | 0.99s | 511.74s |
+| System time | 10.07s | - |
+
+The SpinBarrier approach caused severe performance degradation on HPCSim because:
+1. **Thread oversubscription**: More worker threads than CPU cores causes spinning threads to compete for CPU time
+2. **Variable work duration**: Unbalanced work per cycle means some threads spin for extended periods
+3. **CPU waste**: Spinning burns CPU cycles that could be used for actual simulation work
+4. **Thermal/power impact**: Excessive CPU usage from spin-waiting
+
+**Conclusion**: SpinBarrier is only suitable for workloads where:
+- Wait times are short and predictable
+- Number of threads equals or is less than available CPU cores
+- CPU cores are dedicated to the simulation (no other competing processes)
+
+For general-purpose simulation frameworks like ACALSim that must support diverse workloads, condition variable-based synchronization is more appropriate despite higher context switch counts.
+
 ## Architectural Limitations
 
 The current optimization (~36% reduction) may be near the practical limit given these constraints:

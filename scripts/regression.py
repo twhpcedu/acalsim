@@ -142,6 +142,24 @@ class ValidationError(Exception):
 		super().__init__(message)
 
 
+class SkippedError(Exception):
+	"""Custom exception raised when a test is skipped due to missing dependencies.
+
+	This exception is raised when:
+	    - SST is not available and an SST test is attempted
+	    - Other required dependencies are not installed
+
+	Args:
+	    message (str): Detailed message explaining why the test was skipped.
+
+	Example:
+	    >>> raise SkippedError("SST integration disabled - sst-config not found")
+	"""
+
+	def __init__(self, message):
+		super().__init__(message)
+
+
 def move_to_root_dir() -> None:
 	"""Change working directory to the project root.
 
@@ -396,11 +414,17 @@ def print_result(
 	    Requires MAX_COMPILEMODE_LENGTH and MAX_LINE_WIDTH to be set by
 	    task_analysis() for proper alignment.
 	"""
-	COLOR_CODE: Dict[str, str] = {"RED": '\033[0;31m', "GREEN": '\033[0;32m', "NC": '\033[0m'}
+	COLOR_CODE: Dict[str, str] = {
+	    "RED": '\033[0;31m',
+	    "GREEN": '\033[0;32m',
+	    "YELLOW": '\033[0;33m',
+	    "NC": '\033[0m'
+	}
 	INTERNAL_ERROR_MSG: str = "Regression Error"
 
 	# Determine result message based on success/failure type
 	result_str: str = ""
+	is_skipped: bool = False
 
 	if result:
 		result_str = "Passed"
@@ -410,13 +434,19 @@ def print_result(
 		result_str = stage + " " + "Timeout" if len(stage) > 0 else "Timeout"
 	elif type(exception) == ValidationError:
 		result_str = "Incorrect Result"
+	elif type(exception) == SkippedError:
+		result_str = "Skipped"
+		is_skipped = True
 	else:
 		result_str = INTERNAL_ERROR_MSG
 
-	# Apply color coding: green for success, red for failure
-	colored_result_str: str = (
-	    COLOR_CODE["GREEN"] + result_str if result else COLOR_CODE["RED"] + result_str
-	) + COLOR_CODE["NC"]
+	# Apply color coding: green for success, yellow for skipped, red for failure
+	if result:
+		colored_result_str = COLOR_CODE["GREEN"] + result_str + COLOR_CODE["NC"]
+	elif is_skipped:
+		colored_result_str = COLOR_CODE["YELLOW"] + result_str + COLOR_CODE["NC"]
+	else:
+		colored_result_str = COLOR_CODE["RED"] + result_str + COLOR_CODE["NC"]
 
 	# Print formatted result line with alignment
 	print(
@@ -617,6 +647,13 @@ def exec_proj(
 				    log=build_log,
 				    file_mode="a"
 				)
+
+			# Check if SST was disabled (sst-config not found)
+			# The build.log will contain "SST integration disabled" if SST is not available
+			with open(build_log, "r") as f:
+				build_output = f.read()
+				if "SST integration disabled" in build_output:
+					raise SkippedError("SST integration disabled - sst-config not found")
 		else:
 			# Standard CMake-based build for Debug/Release/GTest modes
 			# Configure CMake with build type
@@ -636,6 +673,11 @@ def exec_proj(
 			    log=build_log,
 			    file_mode="a"
 			)
+
+	except SkippedError as e:
+		# Test skipped due to missing dependencies - report and return True (not a failure)
+		print_result(title=name, mode=compile_mode, result=False, stage="", exception=e)
+		return True  # Skipped tests don't count as failures
 
 	except Exception as e:
 		# Compilation failed - report and abort (don't attempt execution)
