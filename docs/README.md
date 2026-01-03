@@ -60,6 +60,8 @@ Essential features for building simulations:
 | Topic | Document | Description |
 |-------|----------|-------------|
 | **Communication** | [SimChannel](https://acalsim.playlab.tw/docs/for-users/simchannel) | Message passing between simulators |
+| | [SimPort](https://acalsim.playlab.tw/docs/for-users/simport) | Hardware port-based communication |
+| | [CompoundPacket](https://acalsim.playlab.tw/docs/for-users/compound-packet) | Bandwidth modeling with packet batching |
 | **Memory Management** | [RecycleContainer](https://acalsim.playlab.tw/docs/for-users/recycle-container) | Object pooling for high-performance |
 | **Workloads** | [SimTensor](https://acalsim.playlab.tw/docs/for-users/simtensor) | Tensor workload modeling |
 | **Debugging** | [Logging](https://acalsim.playlab.tw/docs/for-users/logging) | Multi-threaded logging utilities |
@@ -119,6 +121,7 @@ Learn by example from test projects:
 |---------|----------|-------------|
 | **testAccelerator** | `src/testAccelerator/` | Simple accelerator with NoC, cache, and memory |
 | **testSimPort** | `src/testSimPort/` | Demonstrates SimPort usage and timing |
+| **testCompoundPacket** | `src/testCompoundPacket/` | Bandwidth modeling with CompoundPacket |
 | **testChannel** | `src/testChannel/` | Inter-simulator communication patterns |
 | **testSTSystemC** | `src/testSTSystemC/` | SystemC integration example |
 

@@ -72,6 +72,7 @@
 #include "module/Pytorch.hh"
 
 // Packet
+#include "packet/CompoundPacket.hh"
 #include "packet/DataPacket.hh"
 #include "packet/EventPacket.hh"
 #include "packet/SimPacket.hh"
