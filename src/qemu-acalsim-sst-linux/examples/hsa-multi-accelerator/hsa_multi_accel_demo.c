@@ -4,7 +4,7 @@
  * Linux application demonstrating parallel execution across multiple
  * AI accelerators using HSA-style programming model via /dev/sst0.
  *
- * Copyright 2023-2025 Playlab/ACAL
+ * Copyright 2023-2026 Playlab/ACAL
  */
 
 #include <errno.h>

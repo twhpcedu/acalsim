@@ -1,4 +1,4 @@
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -444,6 +444,24 @@ PROJ_ARR.append({
 })
 
 PROJ_ARR.append({
+    "name": "testCompoundPacket",
+    "log-name": "testCompoundPacket",
+    "src-subdir": "testCompoundPacket",
+    "exec-args": [
+        "--total-packets",
+        "100",  # Total logical packets to transfer
+        "--packets-per-cycle",
+        "4",  # Bandwidth: 4 packets per compound (256 bytes/cycle)
+        "--queue-size",
+        "4"  # Consumer queue size
+    ],
+    "compile-mode": "Debug",
+    "pre-steps": [],
+    "post-steps": [],
+    "total-tick": 26  # CompoundPacket bandwidth modeling test
+})
+
+PROJ_ARR.append({
     "name": "testConfig",
     "log-name": "testConfig",
     "src-subdir": "testConfig",
@@ -856,10 +874,10 @@ PROJ_ARR.append({
 # ==============================================================================
 # END OF PROJECT CONFIGURATION ARRAY
 # ==============================================================================
-# Total projects configured: 51
+# Total projects configured: 52
 # - Production ThreadManager variants: 4 implementations across multiple tests
 # - Experimental ThreadManager variants: 4 implementations under development
-# - Standalone tests: Basic functionality, config, communication, resources
+# - Standalone tests: Basic functionality, config, communication, resources, CompoundPacket
 # - Hardware tests: Accelerator, Channel, SimPort, CrossBar, PETile
 # - SystemC tests: STSim, STSystemC, SimChannel
 # - RISC-V tests: Template, load/store, branch instructions

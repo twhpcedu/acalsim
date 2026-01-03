@@ -1,0 +1,54 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam componentFontSize 14
+skinparam packageFontSize 14
+skinparam noteFontSize 11
+skinparam arrowThickness 2
+skinparam arrowColor #333333
+skinparam dpi 300
+
+' External Coordinator
+component "**Workload Coordinator**\n(External Process)" as coordinator #LightGreen
+
+' Two SST Ranks side by side
+package "**SST Rank 0**" as rank0 #LightBlue {
+  component "**HostScheduler**" as host0 #87CEEB
+  
+  together {
+    component "**GPU 0**" as gpu0 #FFE4B5
+    component "**GPU 1**" as gpu1 #FFE4B5
+  }
+  
+  host0 -down-> gpu0
+  host0 -down-> gpu1
+}
+
+package "**SST Rank 1**" as rank1 #LightBlue {
+  component "**HostScheduler**" as host1 #87CEEB
+  
+  together {
+    component "**GPU 2**" as gpu2 #FFE4B5
+    component "**GPU 3**" as gpu3 #FFE4B5
+  }
+  
+  host1 -down-> gpu2
+  host1 -down-> gpu3
+}
+
+' Coordinator to ranks
+coordinator -down-> host0 : <color:blue>**TCP**</color>\nnode0:9000
+coordinator -down-> host1 : <color:blue>**TCP**</color>\nnode1:9000
+
+' Intra-rank NVLink (dashed, thinner)
+gpu0 <-[#FF6B6B,thickness=2,dashed]-> gpu1 : <size:10>Intra-rank</size>
+gpu2 <-[#FF6B6B,thickness=2,dashed]-> gpu3 : <size:10>Intra-rank</size>
+
+' Inter-rank NVLink (solid, thicker)
+gpu0 <-[#FF6B6B,thickness=4]-> gpu2 : <color:red>**Inter-rank**</color>\n<color:red>**NVLink**</color>
+gpu1 <-[#FF6B6B,thickness=4]-> gpu3 : <color:red>**Inter-rank**</color>\n<color:red>**NVLink**</color>
+
+@enduml
+

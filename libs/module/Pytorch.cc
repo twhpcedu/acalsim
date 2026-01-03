@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2025 Playlab/ACAL
+ * Copyright 2023-2026 Playlab/ACAL
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <queue>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -50,12 +51,12 @@ std::vector<std::string> Pytorch::getLayerNames() {
 	return layerNames;
 }
 
-std::ostream& operator<<(std::ostream& os, std::unordered_map<std::string, size_t> const& m) {
+static std::string mapToString(const std::unordered_map<std::string, size_t>& m) {
+	std::ostringstream os;
 	os << "{ \n";
 	for (const auto& p : m) { os << "\t(" << p.first << " : " << p.second << ")," << std::endl; }
 	os << "}";
-
-	return os;
+	return os.str();
 }
 
 std::unordered_map<std::string, size_t> Pytorch::getParamSizeByLayers() {
@@ -373,14 +374,14 @@ void Pytorch::printModelInfo() {
 	const std::unordered_map<std::string, size_t>& parameters = getParamSizeByLayers();
 	CLASS_INFO << "# of parameter : " << parameters.size();
 	CLASS_INFO << "Total parameter size : " << getTotalSize(parameters);
-	CLASS_INFO << "parameters : \n" << parameters;
+	CLASS_INFO << "parameters : \n" << mapToString(parameters);
 
 	/* [TODO] to be fixed. the getActivationSize still has bugs
 	 */
 	const std::unordered_map<std::string, size_t>& activations = getActivationSize(input);
 	CLASS_INFO << "# of activations : " << activations.size();
 	CLASS_INFO << "Total activation size : " << getTotalSize(activations);
-	CLASS_INFO << "activations : \n" << activations;
+	CLASS_INFO << "activations : \n" << mapToString(activations);
 
 	// print layer dependency in the topological order
 	/* [TODO] to be fixed. Only one layer is printed out for ResNet18 trace.

@@ -2,7 +2,7 @@
 #
 # QEMU VirtIO SST Device Setup Script
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 #
 # This script integrates the VirtIO SST device into QEMU source tree.
 # Run this script from within the acalsim-workspace Docker container.

@@ -1,0 +1,99 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 10
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 5
+
+title Hybrid Multi-GPU Communication Flow\nInference Request with Inter-GPU Communication
+
+actor "External\nWorkload" as client
+participant "Host\nScheduler\nComponent" as scheduler
+participant "GPU0\nDevice\nComponent" as gpu0_comp
+participant "GPU1\nDevice\nComponent" as gpu1_comp
+participant "NVLink\nSST::Link" as nvlink
+participant "A100-0\nACALSim\n(Job:9100)\n(NVLink:9200)" as a100_0
+participant "A100-1\nACALSim\n(Job:9101)\n(NVLink:9201)" as a100_1
+
+== Job Submission Phase ==
+
+client -> scheduler : Submit inference request
+activate scheduler
+
+scheduler -> scheduler : Apply load balancing\nor tensor parallelism policy
+
+scheduler -> gpu0_comp : Assign job to GPU0
+activate gpu0_comp
+
+scheduler -> gpu1_comp : Assign job to GPU1
+activate gpu1_comp
+
+gpu0_comp -> a100_0 : **Job Port :9100**\nJob submission\n(Low-volume, latency-sensitive)
+activate a100_0
+note right: TCP connection\nJob control traffic
+
+gpu1_comp -> a100_1 : **Job Port :9101**\nJob submission
+activate a100_1
+
+a100_0 -> a100_0 : Cycle-accurate\nGPU simulation\n(2-phase execution)
+
+a100_1 -> a100_1 : Cycle-accurate\nGPU simulation\n(2-phase execution)
+
+== Inter-GPU Communication Phase ==
+
+a100_0 -> gpu0_comp : **NVLink Port :9200**\nSend tensor shard to GPU1\n(High-volume packet)
+note right: TCP connection\nBandwidth-intensive\nDoes NOT block job port
+
+gpu0_comp -> nvlink : Route NVLink packet\nto GPU1
+activate nvlink
+note right: SST::Link\nModels NVLink topology\nConfigurable latency/bandwidth
+
+nvlink -> gpu1_comp : Forward packet
+deactivate nvlink
+
+gpu1_comp -> a100_1 : **NVLink Port :9201**\nDeliver tensor shard
+
+a100_1 -> a100_1 : Process received\ntensor data
+
+a100_1 -> gpu1_comp : **NVLink Port :9201**\nSend KV cache to GPU0
+
+gpu1_comp -> nvlink : Route NVLink packet\nto GPU0
+activate nvlink
+
+nvlink -> gpu0_comp : Forward packet
+deactivate nvlink
+
+gpu0_comp -> a100_0 : **NVLink Port :9200**\nDeliver KV cache
+
+a100_0 -> a100_0 : Continue computation\nwith received data
+
+== Job Completion Phase ==
+
+a100_0 -> gpu0_comp : **Job Port :9100**\nJob completion notification\n(Does NOT wait for NVLink traffic)
+deactivate a100_0
+
+a100_1 -> gpu1_comp : **Job Port :9101**\nJob completion notification
+deactivate a100_1
+
+gpu0_comp -> scheduler : Report completion
+deactivate gpu0_comp
+
+gpu1_comp -> scheduler : Report completion
+deactivate gpu1_comp
+
+scheduler -> scheduler : Aggregate results
+
+scheduler -> client : Return inference result
+deactivate scheduler
+
+note over client, a100_1
+  **Key Benefits of Dual-Port Architecture:**
+  
+  1. Job control messages (green) use Job Port - never blocked
+  2. NVLink data (red) uses NVLink Port - high bandwidth
+  3. A100-0 can complete job while NVLink transfers continue
+  4. SST orchestrates routing without modifying ACALSim code
+  5. Each GPU maintains cycle-accurate fidelity independently
+end note
+
+@enduml
+

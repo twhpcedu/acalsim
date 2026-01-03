@@ -5,7 +5,7 @@
 # This script creates an empty persistent disk and boots QEMU
 # so you can manually format and populate it.
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 # Licensed under the Apache License, Version 2.0
 #
 

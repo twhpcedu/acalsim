@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2025 Playlab/ACAL
+ * Copyright 2023-2026 Playlab/ACAL
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -202,7 +202,12 @@
 #include <exception>
 #include <sstream>
 #include <string>
+#if __has_include(<syncstream>)
 #include <syncstream>
+#define HAS_SYNCSTREAM 1
+#else
+#define HAS_SYNCSTREAM 0
+#endif
 #include <thread>
 #include <vector>
 
@@ -257,7 +262,11 @@ SimTopBase::SimTopBase(const std::vector<std::string>& _configFilePaths, const s
 	ss << "	  / _ \\ (__ / _ \\| |__\\__ \\| || |\\/| |		" << std::endl;
 	ss << "	 /_/ \\_\\___/_/ \\_\\____|___/___|_|  |_|		" << std::endl << std::endl;
 
+#if HAS_SYNCSTREAM && !defined(__APPLE__)
 	std::osyncstream(std::cout) << ss.str();
+#else
+	std::cout << ss.str();
+#endif
 
 	// Register custom terminate function
 	// Ref: https://en.cppreference.com/w/cpp/error/set_terminate

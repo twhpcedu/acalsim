@@ -1,0 +1,144 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam titleFontSize 18
+skinparam titleFontStyle bold
+skinparam componentFontSize 14
+skinparam packageFontSize 16
+skinparam noteFontSize 12
+skinparam arrowFontSize 12
+skinparam arrowColor #333333
+skinparam linetype ortho
+skinparam dpi 300
+
+' title Hybrid ACALSim-SST Multi-GPU Architecture\n4-GPU Configuration with Dual-Port TCP
+
+' SST Orchestration Layer
+package "SST Process (Orchestration Layer)" as sst_layer #LightBlue {
+  
+  ' Host Scheduler
+  component "**HostSchedulerComponent**\n\nWorkload Distribution\nLoad Balancing" as scheduler #LightGreen
+  
+  ' GPU Device Components
+  component "**GPUDeviceComponent 0**\n\nJob Port Wrapper\nNVLink Port Wrapper" as gpu0_comp #LightYellow
+  
+  component "**GPUDeviceComponent 1**\n\nJob Port Wrapper\nNVLink Port Wrapper" as gpu1_comp #LightYellow
+  
+  component "**GPUDeviceComponent 2**\n\nJob Port Wrapper\nNVLink Port Wrapper" as gpu2_comp #LightYellow
+  
+  component "**GPUDeviceComponent 3**\n\nJob Port Wrapper\nNVLink Port Wrapper" as gpu3_comp #LightYellow
+  
+  ' Scheduler connections
+  scheduler -down-> gpu0_comp : **Job**\n**Distribution**
+  scheduler -down-> gpu1_comp : **Job**\n**Distribution**
+  scheduler -down-> gpu2_comp : **Job**\n**Distribution**
+  scheduler -down-> gpu3_comp : **Job**\n**Distribution**
+  
+  ' NVLink SST Links (Full Mesh)
+  gpu0_comp <-[#FF6B6B,thickness=4]-> gpu1_comp : <color:red>**NVLink**</color>
+  gpu0_comp <-[#FF6B6B,thickness=4]-> gpu2_comp : <color:red>**NVLink**</color>
+  gpu0_comp <-[#FF6B6B,thickness=4]-> gpu3_comp : <color:red>**NVLink**</color>
+  gpu1_comp <-[#FF6B6B,thickness=4]-> gpu2_comp : <color:red>**NVLink**</color>
+  gpu1_comp <-[#FF6B6B,thickness=4]-> gpu3_comp : <color:red>**NVLink**</color>
+  gpu2_comp <-[#FF6B6B,thickness=4]-> gpu3_comp : <color:red>**NVLink**</color>
+}
+
+' TCP Connection Layer
+interface "**Job Port**\n**:9100**" as job0 #98FB98
+interface "**NVLink Port**\n**:9200**" as nvlink0 #FFB6C1
+
+interface "**Job Port**\n**:9101**" as job1 #98FB98
+interface "**NVLink Port**\n**:9201**" as nvlink1 #FFB6C1
+
+interface "**Job Port**\n**:9102**" as job2 #98FB98
+interface "**NVLink Port**\n**:9202**" as nvlink2 #FFB6C1
+
+interface "**Job Port**\n**:9103**" as job3 #98FB98
+interface "**NVLink Port**\n**:9203**" as nvlink3 #FFB6C1
+
+gpu0_comp -down-> job0 : <color:green>**Job Control**</color>\n<color:green>**(Low-volume)**</color>
+gpu0_comp -down-> nvlink0 : <color:red>**Data Transfer**</color>\n<color:red>**(High-volume)**</color>
+
+gpu1_comp -down-> job1 : <color:green>**Job Control**</color>
+gpu1_comp -down-> nvlink1 : <color:red>**Data Transfer**</color>
+
+gpu2_comp -down-> job2 : <color:green>**Job Control**</color>
+gpu2_comp -down-> nvlink2 : <color:red>**Data Transfer**</color>
+
+gpu3_comp -down-> job3 : <color:green>**Job Control**</color>
+gpu3_comp -down-> nvlink3 : <color:red>**Data Transfer**</color>
+
+' ACALSim Process Layer
+package "ACALSim A100 Processes (Independent)" as acalsim_layer #LightCoral {
+  
+  component "**A100-0**\n**ACALSim Process**\n\nCycle-Accurate\n2-Phase Execution" as a100_0 #FFE4B5
+  
+  component "**A100-1**\n**ACALSim Process**\n\nCycle-Accurate\n2-Phase Execution" as a100_1 #FFE4B5
+  
+  component "**A100-2**\n**ACALSim Process**\n\nCycle-Accurate\n2-Phase Execution" as a100_2 #FFE4B5
+  
+  component "**A100-3**\n**ACALSim Process**\n\nCycle-Accurate\n2-Phase Execution" as a100_3 #FFE4B5
+}
+
+job0 -down-> a100_0 : TCP
+nvlink0 -down-> a100_0 : TCP
+
+job1 -down-> a100_1 : TCP
+nvlink1 -down-> a100_1 : TCP
+
+job2 -down-> a100_2 : TCP
+nvlink2 -down-> a100_2 : TCP
+
+job3 -down-> a100_3 : TCP
+nvlink3 -down-> a100_3 : TCP
+
+' Notes
+note right of scheduler
+  **HostSchedulerComponent**
+  
+  • Inference request distribution
+  • Load balancing
+  • Job scheduling
+end note
+
+note left of gpu0_comp
+  **GPUDeviceComponent**
+  
+  Job Port:
+  • Job submission
+  • Completion notifications
+  
+  NVLink Port:
+  • Tensor sharding
+  • KV cache migration
+end note
+
+note bottom of sst_layer
+  **NVLink SST::Link**
+  
+  • Full-mesh topology
+  • Configurable latency/bandwidth
+  • Non-blocking routing
+end note
+
+note right of a100_0
+  **ACALSim A100**
+  
+  • Cycle-accurate simulation
+  • 2-phase execution
+  • Process isolation
+  • One GPU per process
+end note
+
+
+legend right
+  |<color:green>**Green**</color> | **Job Port** (Low-volume) |
+  |<color:red>**Red**</color> | **NVLink Port** (High-volume) |
+  |<back:LightBlue>    </back> | **SST Layer** |
+  |<back:LightCoral>    </back> | **ACALSim Layer** |
+endlegend
+
+@enduml
+

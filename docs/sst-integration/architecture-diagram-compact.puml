@@ -1,0 +1,115 @@
+@startuml ACALSim SST Integration - Simplified
+
+!theme plain
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 10
+skinparam arrowColor #333333
+skinparam linetype ortho
+
+title ACALSim SST Integration - Compact Architecture
+
+' SST-Core Framework
+package "SST-Core" as sst #LightBlue {
+  [Discrete Event Engine]
+  [Python Config]
+  [Component Registry]
+}
+
+' Core ACALSim
+package "Core ACALSim\n(libacalsim.so)" as acalsim #LightGreen {
+  [SimTopBase]
+  [SimBase]
+  [SimPort/SimChannel]
+  [SimConfig]
+  
+  [SimTopBase] --> [SimBase]
+  [SimBase] --> [SimPort/SimChannel]
+}
+
+' SST Bridge
+package "SST Integration Bridge\n(libacalsim_sst.so)" as bridge #LightYellow {
+  component "ACALSimComponent" as comp {
+    clockTick()
+    Phase 1 + Phase 2
+  }
+  [ACALSimSSTEvent]
+  
+  comp --> [ACALSimSSTEvent]
+}
+
+' Applications
+package "Application Components" as apps #Lavender {
+  component "RISCVSoCStandalone" as riscv {
+    Complete RV32I CPU
+    ✅ WORKING
+  }
+  
+  component "QEMUBinaryComponent" as qemu {
+    QEMU Integration
+    Binary MMIO Protocol
+    ✅ PRODUCTION
+  }
+  
+  component "Device Components" as devices {
+    • ACALSimDeviceComponent
+    • ACALSimComputeDevice
+    • ACALSimVirtIODevice
+    • HSAComputeComponent
+  }
+}
+
+' External
+package "External Interfaces" as external #LightCoral {
+  [QEMU Process\nLinux + virtio-sst.ko]
+  [PyTorch Docker\ndevice_gemm()]
+  [User Applications]
+}
+
+' Connections
+sst --> comp : Component Interface
+comp --> [SimTopBase] : Wraps
+comp --|> riscv : extends
+comp --|> qemu : extends
+comp --|> devices : extends
+
+qemu --> devices : SST Links
+[QEMU Process\nLinux + virtio-sst.ko] --> qemu : Unix Socket
+[PyTorch Docker\ndevice_gemm()] --> [QEMU Process\nLinux + virtio-sst.ko] : TCP
+[User Applications] --> [QEMU Process\nLinux + virtio-sst.ko]
+
+' Notes
+note right of sst
+  **SST-Core Framework**
+  External simulation toolkit
+  • Event-driven engine
+  • Component lifecycle
+  • Python configuration
+end note
+
+note right of acalsim
+  **ACALSim Core**
+  Event-driven framework
+  • 2-phase execution
+  • Fast-forward optimization
+  • Port/Channel communication
+end note
+
+note right of bridge
+  **Integration Bridge**
+  Maps ACALSim to SST
+  • 1 SST cycle = 1 iteration
+  • clockTick() runs both phases
+  • return false = continue
+  • return true = stop
+end note
+
+note bottom of apps
+  **Production Status:**
+  • RISCVSoCStandalone: ✅ Working
+  • QEMUBinaryComponent: ✅ Production
+  • Device Components: ✅ Production
+end note
+
+@enduml
+

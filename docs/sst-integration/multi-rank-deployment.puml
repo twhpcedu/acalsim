@@ -1,0 +1,127 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam componentFontSize 14
+skinparam packageFontSize 16
+skinparam noteFontSize 12
+skinparam arrowColor #333333
+skinparam dpi 300
+
+title 12-GPU Multi-Rank Deployment Example
+
+node "**Coordinator Node**" as coord_node #LightGreen {
+  component "**Workload Driver**\npython workload_runner.py" as driver
+}
+
+node "**Compute Node 0**" as node0 #LightBlue {
+  component "**SST Rank 0**\nsst config_rank0.py\nTCP Port: 9000" as sst0 #87CEEB
+  
+  component "**A100-0**\nJob: 9100\nNVLink: 9200" as gpu0_0 #FFE4B5
+  component "**A100-1**\nJob: 9101\nNVLink: 9201" as gpu0_1 #FFE4B5
+  component "**A100-2**\nJob: 9102\nNVLink: 9202" as gpu0_2 #FFE4B5
+  component "**A100-3**\nJob: 9103\nNVLink: 9203" as gpu0_3 #FFE4B5
+  
+  sst0 -down-> gpu0_0
+  sst0 -down-> gpu0_1
+  sst0 -down-> gpu0_2
+  sst0 -down-> gpu0_3
+}
+
+node "**Compute Node 1**" as node1 #LightBlue {
+  component "**SST Rank 1**\nsst config_rank1.py\nTCP Port: 9000" as sst1 #87CEEB
+  
+  component "**A100-4**\nJob: 9100\nNVLink: 9200" as gpu1_0 #FFE4B5
+  component "**A100-5**\nJob: 9101\nNVLink: 9201" as gpu1_1 #FFE4B5
+  component "**A100-6**\nJob: 9102\nNVLink: 9202" as gpu1_2 #FFE4B5
+  component "**A100-7**\nJob: 9103\nNVLink: 9203" as gpu1_3 #FFE4B5
+  
+  sst1 -down-> gpu1_0
+  sst1 -down-> gpu1_1
+  sst1 -down-> gpu1_2
+  sst1 -down-> gpu1_3
+}
+
+node "**Compute Node 2**" as node2 #LightBlue {
+  component "**SST Rank 2**\nsst config_rank2.py\nTCP Port: 9000" as sst2 #87CEEB
+  
+  component "**A100-8**\nJob: 9100\nNVLink: 9200" as gpu2_0 #FFE4B5
+  component "**A100-9**\nJob: 9101\nNVLink: 9201" as gpu2_1 #FFE4B5
+  component "**A100-10**\nJob: 9102\nNVLink: 9202" as gpu2_2 #FFE4B5
+  component "**A100-11**\nJob: 9103\nNVLink: 9203" as gpu2_3 #FFE4B5
+  
+  sst2 -down-> gpu2_0
+  sst2 -down-> gpu2_1
+  sst2 -down-> gpu2_2
+  sst2 -down-> gpu2_3
+}
+
+driver -down-> sst0 : TCP\nnode0:9000
+driver -down-> sst1 : TCP\nnode1:9000
+driver -down-> sst2 : TCP\nnode2:9000
+
+gpu0_0 <-[#FF6B6B,thickness=3]-> gpu1_0 : Inter-rank\nNVLink
+gpu0_1 <-[#FF6B6B,thickness=3]-> gpu1_1 : Inter-rank\nNVLink
+gpu0_2 <-[#FF6B6B,thickness=3]-> gpu1_2 : Inter-rank\nNVLink
+gpu0_3 <-[#FF6B6B,thickness=3]-> gpu1_3 : Inter-rank\nNVLink
+
+gpu1_0 <-[#FF6B6B,thickness=3]-> gpu2_0
+gpu1_1 <-[#FF6B6B,thickness=3]-> gpu2_1
+gpu1_2 <-[#FF6B6B,thickness=3]-> gpu2_2
+gpu1_3 <-[#FF6B6B,thickness=3]-> gpu2_3
+
+note top of coord_node
+  **Coordinator Process**
+  
+  Command:
+  python workload_runner.py \
+    --ranks node0:9000,node1:9000,node2:9000 \
+    --workload llama2_70b.json \
+    --parallelism tensor-3way
+end note
+
+note bottom of node0
+  **Node 0 Startup**
+  
+  # Start A100 processes (4 instances)
+  for i in 0 1 2 3; do
+    ./build/A100 \
+      --job-socket $((9100+i)) \
+      --nvlink-socket $((9200+i)) \
+      --device-id $i &
+  done
+  
+  # Start SST rank
+  mpirun -n 1 sst config_rank0.py \
+    -- --rank 0 --port 9000
+end note
+
+note bottom of node1
+  **Node 1 Startup**
+  
+  Same as Node 0, but:
+  • rank 1
+  • Global device IDs 4-7
+  • Same local ports (9100-9103)
+end note
+
+note bottom of node2
+  **Node 2 Startup**
+  
+  Same as Node 0, but:
+  • rank 2
+  • Global device IDs 8-11
+  • Same local ports (9100-9103)
+end note
+
+legend right
+  |= Component |= Process Count |= Total |
+  | SST Ranks | 3 (1 per node) | 3 |
+  | A100 Processes | 4 per node | 12 |
+  | Coordinator | 1 | 1 |
+  |= **Total Processes** || **16** |
+endlegend
+
+@enduml
+

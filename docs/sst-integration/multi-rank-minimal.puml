@@ -1,0 +1,53 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam componentFontSize 14
+skinparam packageFontSize 14
+skinparam arrowThickness 2
+skinparam arrowColor #333333
+skinparam dpi 300
+
+' Single coordinator
+component "**Workload Coordinator**" as coordinator #90EE90
+
+' Two ranks with internal structure
+package "**SST Rank 0**\n(Node 0)" as rank0 #E6F3FF {
+  component "**HostScheduler**\n+ GPU Devices\n(GPUs 0-1)" as r0_content #87CEEB
+}
+
+package "**SST Rank 1**\n(Node 1)" as rank1 #E6F3FF {
+  component "**HostScheduler**\n+ GPU Devices\n(GPUs 2-3)" as r1_content #87CEEB
+}
+
+' Connections
+coordinator -down-> r0_content : <color:blue>**TCP**</color>\nnode0:9000
+coordinator -down-> r1_content : <color:blue>**TCP**</color>\nnode1:9000
+
+r0_content <-[#FF6B6B,thickness=4]-> r1_content : <color:red>**Inter-rank NVLink**</color>\n<color:red>**via SST Links**</color>
+
+note right of coordinator
+  **Responsibilities:**
+  • Global scheduling
+  • Rank selection
+  • Parallelism logic
+  • Workload distribution
+end note
+
+note bottom of rank0
+  **Intra-rank:**
+  • Local NVLink mesh
+  • HostScheduler dispatch
+  • GPU device simulation
+end note
+
+note bottom of rank1
+  **Scalability:**
+  • Add ranks for more GPUs
+  • Linear scaling to 100+ GPUs
+  • Independent rank processes
+end note
+
+@enduml
+

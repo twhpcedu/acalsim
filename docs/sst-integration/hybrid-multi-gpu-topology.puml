@@ -1,0 +1,107 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 10
+skinparam arrowColor #333333
+
+title Hybrid Multi-GPU Architecture - NVLink Topology Views
+
+' Full Mesh Topology
+together {
+  card "**NVSwitch Full-Mesh Topology**\n(Default Configuration)" as mesh_card #LightBlue {
+    component "GPU0" as mesh_gpu0 #FFE4B5
+    component "GPU1" as mesh_gpu1 #FFE4B5
+    component "GPU2" as mesh_gpu2 #FFE4B5
+    component "GPU3" as mesh_gpu3 #FFE4B5
+    
+    mesh_gpu0 <-[#FF6B6B,thickness=3]-> mesh_gpu1 : NVLink
+    mesh_gpu0 <-[#FF6B6B,thickness=3]-> mesh_gpu2 : NVLink
+    mesh_gpu0 <-[#FF6B6B,thickness=3]-> mesh_gpu3 : NVLink
+    mesh_gpu1 <-[#FF6B6B,thickness=3]-> mesh_gpu2 : NVLink
+    mesh_gpu1 <-[#FF6B6B,thickness=3]-> mesh_gpu3 : NVLink
+    mesh_gpu2 <-[#FF6B6B,thickness=3]-> mesh_gpu3 : NVLink
+  }
+  
+  note right of mesh_card
+    **Full-Mesh Characteristics:**
+    • Any GPU to any GPU
+    • 6 bidirectional links (N*(N-1)/2)
+    • Maximum bandwidth
+    • Lowest latency
+    • Models NVSwitch fabric
+  end note
+}
+
+' Ring Topology
+together {
+  card "**Ring Topology**\n(Alternative Configuration)" as ring_card #LightGreen {
+    component "GPU0" as ring_gpu0 #FFE4B5
+    component "GPU1" as ring_gpu1 #FFE4B5
+    component "GPU2" as ring_gpu2 #FFE4B5
+    component "GPU3" as ring_gpu3 #FFE4B5
+    
+    ring_gpu0 -[#FF6B6B,thickness=3]-> ring_gpu1 : NVLink
+    ring_gpu1 -[#FF6B6B,thickness=3]-> ring_gpu2 : NVLink
+    ring_gpu2 -[#FF6B6B,thickness=3]-> ring_gpu3 : NVLink
+    ring_gpu3 -[#FF6B6B,thickness=3]-> ring_gpu0 : NVLink
+  }
+  
+  note right of ring_card
+    **Ring Characteristics:**
+    • Each GPU to 2 neighbors
+    • 4 bidirectional links
+    • Lower bandwidth
+    • Higher multi-hop latency
+    • Models PCIe-only systems
+  end note
+}
+
+' 2x2 Mesh Topology
+together {
+  card "**2x2 Mesh Topology**\n(Alternative Configuration)" as mesh2x2_card #LightYellow {
+    component "GPU0" as grid_gpu0 #FFE4B5
+    component "GPU1" as grid_gpu1 #FFE4B5
+    component "GPU2" as grid_gpu2 #FFE4B5
+    component "GPU3" as grid_gpu3 #FFE4B5
+    
+    grid_gpu0 -[#FF6B6B,thickness=3]-> grid_gpu1 : NVLink (horizontal)
+    grid_gpu2 -[#FF6B6B,thickness=3]-> grid_gpu3 : NVLink (horizontal)
+    grid_gpu0 -[#FF6B6B,thickness=3]-> grid_gpu2 : NVLink (vertical)
+    grid_gpu1 -[#FF6B6B,thickness=3]-> grid_gpu3 : NVLink (vertical)
+  }
+  
+  note right of mesh2x2_card
+    **2x2 Mesh Characteristics:**
+    • Each GPU to 2 neighbors
+    • 4 bidirectional links
+    • Balanced topology
+    • Models physical layout
+    • Good for pipeline parallelism
+  end note
+}
+
+' Configuration section
+card "**SST Configuration Example**" as config #Lavender {
+  component "Python Config\n\n# Full-Mesh\nlink01 = sst.Link('nvlink_0_1')\nlink01.connect(\n  (gpu0, 'nvlink_port', '10ns'),\n  (gpu1, 'nvlink_port', '10ns')\n)\n\n# Add links for all pairs\n# GPU0-GPU1, GPU0-GPU2, GPU0-GPU3\n# GPU1-GPU2, GPU1-GPU3\n# GPU2-GPU3" as config_code
+}
+
+note bottom of config
+  **Flexibility Benefits:**
+  
+  ✓ Topology configured in SST Python script
+  ✓ No ACALSim code changes needed
+  ✓ Easy to experiment with different topologies
+  ✓ Latency and bandwidth per-link configurable
+  ✓ Can model heterogeneous links
+end note
+
+legend right
+  |<color:red>**Red Lines**</color> | NVLink SST::Link (High-bandwidth) |
+  |<back:FFE4B5>  </back> | GPU ACALSim Process |
+  | Full-Mesh | Best performance, most links |
+  | Ring | Simplest, fewer links |
+  | 2x2 Mesh | Balanced, layout-aware |
+endlegend
+
+@enduml
+

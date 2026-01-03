@@ -4,7 +4,7 @@
 # This script sets up the SST environment and launches the simulation
 # with the LLAMA accelerator configuration.
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 # Licensed under the Apache License, Version 2.0
 
 # Exit on error

@@ -1,0 +1,152 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam componentFontSize 14
+skinparam packageFontSize 16
+skinparam noteFontSize 12
+skinparam arrowColor #333333
+skinparam dpi 300
+
+title Multi-Rank Scalable Simulation Architecture
+
+' External Coordinator Layer
+package "External Coordinator (Separate Process)" as coordinator_layer #LightGreen {
+  component "**HostScheduler / Workload Driver**\n\nGlobal job scheduling\nLoad balancing across ranks\nTensor/Pipeline parallelism" as coordinator
+}
+
+' TCP/IPC Communication
+interface "TCP/IPC" as tcp_line
+
+coordinator -down-> tcp_line : MicroOp batches\nJob distribution
+
+' Multi-Rank SST Layer
+together {
+  package "SST Rank 0 (Node 0)" as rank0 #LightBlue {
+    component "**HostSchedulerComponent**\n(Lightweight Dispatcher)" as host0 #LightYellow
+    
+    component "**GPU 0**\nGPUDeviceComponent" as gpu0 #FFE4B5
+    component "**GPU 1**\nGPUDeviceComponent" as gpu1 #FFE4B5
+    component "**GPU 2**\nGPUDeviceComponent" as gpu2 #FFE4B5
+    component "**GPU 3**\nGPUDeviceComponent" as gpu3 #FFE4B5
+    
+    host0 -down-> gpu0
+    host0 -down-> gpu1
+    host0 -down-> gpu2
+    host0 -down-> gpu3
+  }
+  
+  package "SST Rank 1 (Node 1)" as rank1 #LightBlue {
+    component "**HostSchedulerComponent**\n(Lightweight Dispatcher)" as host1 #LightYellow
+    
+    component "**GPU 4**\nGPUDeviceComponent" as gpu4 #FFE4B5
+    component "**GPU 5**\nGPUDeviceComponent" as gpu5 #FFE4B5
+    component "**GPU 6**\nGPUDeviceComponent" as gpu6 #FFE4B5
+    component "**GPU 7**\nGPUDeviceComponent" as gpu7 #FFE4B5
+    
+    host1 -down-> gpu4
+    host1 -down-> gpu5
+    host1 -down-> gpu6
+    host1 -down-> gpu7
+  }
+  
+  package "SST Rank 2 (Node 2)" as rank2 #LightBlue {
+    component "**HostSchedulerComponent**\n(Lightweight Dispatcher)" as host2 #LightYellow
+    
+    component "**GPU 8**\nGPUDeviceComponent" as gpu8 #FFE4B5
+    component "**GPU 9**\nGPUDeviceComponent" as gpu9 #FFE4B5
+    component "**GPU 10**\nGPUDeviceComponent" as gpu10 #FFE4B5
+    component "**GPU 11**\nGPUDeviceComponent" as gpu11 #FFE4B5
+    
+    host2 -down-> gpu8
+    host2 -down-> gpu9
+    host2 -down-> gpu10
+    host2 -down-> gpu11
+  }
+}
+
+tcp_line -down-> host0 : port 9000
+tcp_line -down-> host1 : port 9001
+tcp_line -down-> host2 : port 9002
+
+' Inter-Rank Communication
+gpu0 <-[#FF6B6B,thickness=4]-> gpu4 : <color:red>**Inter-rank**</color>\n<color:red>**NVLink**</color>
+gpu1 <-[#FF6B6B,thickness=4]-> gpu5 : <color:red>**Inter-rank**</color>
+gpu2 <-[#FF6B6B,thickness=4]-> gpu6 : <color:red>**Inter-rank**</color>
+gpu3 <-[#FF6B6B,thickness=4]-> gpu7 : <color:red>**Inter-rank**</color>
+
+gpu4 <-[#FF6B6B,thickness=4]-> gpu8 : <color:red>**Inter-rank**</color>
+gpu5 <-[#FF6B6B,thickness=4]-> gpu9 : <color:red>**Inter-rank**</color>
+gpu6 <-[#FF6B6B,thickness=4]-> gpu10 : <color:red>**Inter-rank**</color>
+gpu7 <-[#FF6B6B,thickness=4]-> gpu11 : <color:red>**Inter-rank**</color>
+
+' Intra-Rank NVLink (within rank 0)
+gpu0 <-[#FF6B6B,thickness=2,dashed]-> gpu1
+gpu0 <-[#FF6B6B,thickness=2,dashed]-> gpu2
+gpu1 <-[#FF6B6B,thickness=2,dashed]-> gpu3
+
+' ACALSim Process Layer (showing for Rank 0 only for clarity)
+package "ACALSim A100 Processes (Rank 0)" as acalsim0 #LightCoral {
+  component "**A100-0**\nJob: 9100\nNVLink: 9200" as a100_0 #FFE4B5
+  component "**A100-1**\nJob: 9101\nNVLink: 9201" as a100_1 #FFE4B5
+  component "**A100-2**\nJob: 9102\nNVLink: 9202" as a100_2 #FFE4B5
+  component "**A100-3**\nJob: 9103\nNVLink: 9203" as a100_3 #FFE4B5
+}
+
+gpu0 -down-> a100_0 : TCP
+gpu1 -down-> a100_1 : TCP
+gpu2 -down-> a100_2 : TCP
+gpu3 -down-> a100_3 : TCP
+
+note right of coordinator
+  **External Coordinator**
+  
+  • Global job scheduling
+  • Rank selection (load balancing)
+  • Tensor parallelism coordination
+  • Pipeline parallelism orchestration
+  • Multi-node workload distribution
+end note
+
+note bottom of rank0
+  **SST Rank 0 (Node 0)**
+  • GPUs 0-3
+  • Port: 9000
+  • Local NVLink mesh
+end note
+
+note bottom of rank1
+  **SST Rank 1 (Node 1)**
+  • GPUs 4-7
+  • Port: 9001
+  • Local NVLink mesh
+end note
+
+note bottom of rank2
+  **SST Rank 2 (Node 2)**
+  • GPUs 8-11
+  • Port: 9002
+  • Local NVLink mesh
+end note
+
+note bottom of acalsim0
+  **ACALSim A100 Processes**
+  
+  Dual-port per GPU:
+  • Job Port (91XX): Control
+  • NVLink Port (92XX): Data
+  
+  Same pattern for Ranks 1 & 2
+  (not shown for clarity)
+end note
+
+legend right
+  |<color:red>**Red Solid**</color> | Inter-rank NVLink |
+  |<color:red>**Red Dashed**</color> | Intra-rank NVLink |
+  |<back:LightBlue>    </back> | SST Rank |
+  |<back:LightCoral>    </back> | ACALSim Processes |
+endlegend
+
+@enduml
+

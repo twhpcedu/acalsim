@@ -1,0 +1,94 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam componentFontSize 14
+skinparam packageFontSize 16
+skinparam noteFontSize 12
+skinparam arrowColor #333333
+skinparam dpi 300
+
+title Multi-Rank Layered Architecture
+
+' Application Layer
+package "**Application Layer**" as app_layer #LightGreen {
+  component "**Workload Driver / InferenceServer**\n\n• Global job scheduling\n• Rank selection and load balancing\n• Tensor/pipeline parallelism\n• Request batching and routing\n• Multi-node coordination" as app #90EE90
+}
+
+' SST Dispatcher Layer
+package "**SST Dispatcher Layer** (Per Rank)" as sst_layer #LightBlue {
+  component "**HostSchedulerComponent**\n\n• Lightweight job dispatcher\n• Routes jobs to local GPUs\n• Manages TCP connections\n• Completion aggregation\n• NO scheduling decisions" as sst_host #87CEEB
+}
+
+' Device Wrapper Layer
+package "**Device Wrapper Layer** (Per GPU)" as wrapper_layer #LightYellow {
+  component "**GPUDeviceComponent**\n\n• Wraps ACALSim A100 process\n• Dual-port TCP management:\n  - Job port (91XX): Control\n  - NVLink port (92XX): Data\n• SST Link management\n• Inter-device routing" as gpu_wrapper #FFD700
+}
+
+' Device Simulation Layer
+package "**Device Simulation Layer** (Per GPU)" as device_layer #LightCoral {
+  component "**ACALSim A100 Process**\n\n• Pure cycle-accurate simulation\n• HBM/DDR memory hierarchy\n• Compute unit modeling\n• Two-phase execution\n• Local device state only" as a100 #FF6B6B
+}
+
+app -down-> sst_host : TCP/IPC\nMicroOp batches\nRank-specific jobs
+
+sst_host -down-> gpu_wrapper : SST::Link\nJob dispatch\nDevice selection
+
+gpu_wrapper -down-> a100 : Dual TCP\nJob port + NVLink port\nMicroOp execution
+
+note right of app
+  **Responsibilities:**
+  Scheduling, batching,
+  memory management,
+  multi-rank coordination
+  
+  **Location:**
+  Separate process
+  
+  **Communication:**
+  TCP to all ranks
+end note
+
+note right of sst_host
+  **Responsibilities:**
+  Job routing, completion
+  tracking, TCP server
+  
+  **Location:**
+  SST Rank process
+  
+  **Communication:**
+  TCP (external) +
+  SST Links (internal)
+end note
+
+note right of gpu_wrapper
+  **Responsibilities:**
+  Device bridging,
+  NVLink coordination,
+  inter-device routing
+  
+  **Location:**
+  SST Rank process
+  
+  **Communication:**
+  Dual TCP to A100 +
+  SST Links to other GPUs
+end note
+
+note right of a100
+  **Responsibilities:**
+  Cycle-accurate
+  execution, memory
+  timing, compute
+  
+  **Location:**
+  Standalone process
+  
+  **Communication:**
+  Dual TCP (job + NVLink)
+end note
+
+@enduml
+

@@ -1,4 +1,4 @@
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 """
 SST Configuration for Linux Integration - Basic Test
 
-Copyright 2023-2025 Playlab/ACAL
+Copyright 2023-2026 Playlab/ACAL
 
 This configuration sets up a basic SST simulation with a single
 VirtIO SST device for Linux integration testing.

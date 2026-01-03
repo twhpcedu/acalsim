@@ -8,7 +8,7 @@
 # 3. Builds complete Linux rootfs (2-4 hours)
 # 4. Creates persistent disk with Python environment
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 # Licensed under the Apache License, Version 2.0
 #
 

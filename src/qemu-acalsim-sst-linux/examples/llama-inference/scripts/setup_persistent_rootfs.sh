@@ -5,7 +5,7 @@
 # This script creates a persistent root disk that preserves changes across reboots.
 # Much better than initramfs for development and testing.
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 # Licensed under the Apache License, Version 2.0
 #
 

@@ -2,7 +2,7 @@
 #
 # QEMU Launch Script for Linux SST Integration
 #
-# Copyright 2023-2025 Playlab/ACAL
+# Copyright 2023-2026 Playlab/ACAL
 #
 # This script launches QEMU with Linux kernel and VirtIO SST device.
 #

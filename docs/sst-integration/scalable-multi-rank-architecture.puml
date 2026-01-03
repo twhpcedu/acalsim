@@ -1,0 +1,152 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam defaultFontName Arial
+skinparam titleFontSize 18
+skinparam titleFontStyle bold
+skinparam componentFontSize 14
+skinparam packageFontSize 16
+skinparam noteFontSize 12
+skinparam arrowFontSize 12
+skinparam arrowColor #333333
+skinparam linetype ortho
+skinparam dpi 300
+
+' title Scalable Multi-Rank SST Architecture for LLM Inference
+
+' External Process Layer
+package "Scheduling & Coordination Layer (Separate Process)" as external_layer #LightCyan {
+  
+  component "**Mode A:**\n**InferenceServer C++**\n\nBatcher\nMemory Manager\nJob Scheduler\nRequest Router" as mode_a #LightGreen
+  
+  component "**Mode B:**\n**PyTorch Backend**\n(torch.compile)\n\nFX Graph Capture\nCollective Mapping\nDevice Placement" as mode_b #LightGreen
+}
+
+' Communication Layer
+interface "TCP/IPC\nMicroOp Batches" as tcp_ipc
+
+mode_a -down-> tcp_ipc
+mode_b -down-> tcp_ipc
+
+' SST Multi-Rank Layer
+together {
+  package "**SST Rank 0**" as rank0 #LightBlue {
+    component "**HostScheduler**\n(Dispatcher)" as host0 #LightYellow
+    
+    package "GPU Devices" as gpus0 {
+      component "**GPU 0**\n\nA100\nHBM 80GB" as gpu0 #FFE4B5
+      component "**GPU 1**\n\nA100\nHBM 80GB" as gpu1 #FFE4B5
+      component "**GPU 2**\n\nA100\nHBM 80GB" as gpu2 #FFE4B5
+      component "**GPU 3**\n\nA100\nHBM 80GB" as gpu3 #FFE4B5
+    }
+    
+    host0 -down-> gpu0
+    host0 -down-> gpu1
+    host0 -down-> gpu2
+    host0 -down-> gpu3
+    
+    gpu0 <-[#FF6B6B,thickness=4]-> gpu1 : <color:red>**NVLink**</color>
+    gpu0 <-[#FF6B6B,thickness=4]-> gpu2 : <color:red>**NVLink**</color>
+    gpu0 <-[#FF6B6B,thickness=4]-> gpu3 : <color:red>**NVLink**</color>
+    gpu1 <-[#FF6B6B,thickness=4]-> gpu2 : <color:red>**NVLink**</color>
+    gpu1 <-[#FF6B6B,thickness=4]-> gpu3 : <color:red>**NVLink**</color>
+    gpu2 <-[#FF6B6B,thickness=4]-> gpu3 : <color:red>**NVLink**</color>
+  }
+  
+  package "**SST Rank 1**" as rank1 #LightBlue {
+    component "**HostScheduler**\n(Dispatcher)" as host1 #LightYellow
+    
+    package "GPU Devices" as gpus1 {
+      component "**GPU 4**\n\nA100\nHBM 80GB" as gpu4 #FFE4B5
+      component "**GPU 5**\n\nA100\nHBM 80GB" as gpu5 #FFE4B5
+      component "**GPU 6**\n\nA100\nHBM 80GB" as gpu6 #FFE4B5
+      component "**GPU 7**\n\nA100\nHBM 80GB" as gpu7 #FFE4B5
+    }
+    
+    host1 -down-> gpu4
+    host1 -down-> gpu5
+    host1 -down-> gpu6
+    host1 -down-> gpu7
+    
+    gpu4 <-[#FF6B6B,thickness=4]-> gpu5 : <color:red>**NVLink**</color>
+    gpu4 <-[#FF6B6B,thickness=4]-> gpu6 : <color:red>**NVLink**</color>
+    gpu4 <-[#FF6B6B,thickness=4]-> gpu7 : <color:red>**NVLink**</color>
+    gpu5 <-[#FF6B6B,thickness=4]-> gpu6 : <color:red>**NVLink**</color>
+    gpu5 <-[#FF6B6B,thickness=4]-> gpu7 : <color:red>**NVLink**</color>
+    gpu6 <-[#FF6B6B,thickness=4]-> gpu7 : <color:red>**NVLink**</color>
+  }
+  
+  package "**SST Rank 2**" as rank2 #LightBlue {
+    component "**HostScheduler**\n(Dispatcher)" as host2 #LightYellow
+    
+    package "GPU Devices" as gpus2 {
+      component "**GPU 8**\n\nA100\nHBM 80GB" as gpu8 #FFE4B5
+      component "**GPU 9**\n\nA100\nHBM 80GB" as gpu9 #FFE4B5
+      component "**GPU 10**\n\nA100\nHBM 80GB" as gpu10 #FFE4B5
+      component "**GPU 11**\n\nA100\nHBM 80GB" as gpu11 #FFE4B5
+    }
+    
+    host2 -down-> gpu8
+    host2 -down-> gpu9
+    host2 -down-> gpu10
+    host2 -down-> gpu11
+    
+    gpu8 <-[#FF6B6B,thickness=4]-> gpu9 : <color:red>**NVLink**</color>
+    gpu8 <-[#FF6B6B,thickness=4]-> gpu10 : <color:red>**NVLink**</color>
+    gpu8 <-[#FF6B6B,thickness=4]-> gpu11 : <color:red>**NVLink**</color>
+    gpu9 <-[#FF6B6B,thickness=4]-> gpu10 : <color:red>**NVLink**</color>
+    gpu9 <-[#FF6B6B,thickness=4]-> gpu11 : <color:red>**NVLink**</color>
+    gpu10 <-[#FF6B6B,thickness=4]-> gpu11 : <color:red>**NVLink**</color>
+  }
+}
+
+' Connections from external to SST ranks
+tcp_ipc -down-> host0 : TCP
+tcp_ipc -down-> host1 : TCP
+tcp_ipc -down-> host2 : TCP
+
+' Inter-rank Links
+gpu3 <-[#9370DB,thickness=4]-> gpu4 : <color:purple>**Inter-Rank**</color>\n<color:purple>**NVLink**</color>
+gpu7 <-[#9370DB,thickness=4]-> gpu8 : <color:purple>**Inter-Rank**</color>\n<color:purple>**NVLink**</color>
+
+' Notes
+note right of external_layer
+  **Scheduling Layer**
+  
+  Separate Process Benefits:
+  • Multi-rank coordination
+  • Independent development
+  • Debugging isolation
+  • Code reusability
+end note
+
+note left of rank0
+  **SST Rank**
+  
+  Each rank manages:
+  • 4 GPU devices
+  • Intra-rank NVLink mesh
+  • Lightweight dispatcher
+  • Independent simulation
+end note
+
+note bottom of rank1
+  **Scalability**
+  
+  • Linear scaling with ranks
+  • 12 GPUs shown (3 ranks × 4 GPUs)
+  • Extensible to 16, 32, 64+ GPUs
+  • Inter-rank via NVLink/InfiniBand
+end note
+
+legend right
+  |<color:green>**Green**</color> | Scheduling Processes |
+  |<color:blue>**Blue**</color> | SST Simulation Ranks |
+  |<color:orange>**Orange**</color> | GPU Devices (A100) |
+  |<color:red>**Red**</color> | Intra-Rank NVLink |
+  |<color:purple>**Purple**</color> | Inter-Rank NVLink |
+endlegend
+
+@enduml
+

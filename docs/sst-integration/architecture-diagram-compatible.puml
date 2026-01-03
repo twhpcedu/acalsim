@@ -1,0 +1,225 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam defaultFontSize 10
+skinparam arrowColor #333333
+
+title ACALSim SST Integration - Top-Level Architecture
+
+' SST-Core Framework
+package "SST-Core Framework (External)" as sst_core #LightBlue {
+  component "Discrete Event Engine" as sst_engine
+  component "Python Config System" as sst_python
+  component "Component Registry (ELI)" as sst_eli
+  component "Statistics & Visualization" as sst_stats
+  component "Clock/Time Management" as sst_clock
+  
+  sst_python -down-> sst_eli
+  sst_eli -down-> sst_engine
+  sst_engine -left-> sst_clock
+  sst_engine -right-> sst_stats
+}
+
+' Core ACALSim Framework
+package "Core ACALSim Framework (libacalsim.so)" as acalsim_core #LightGreen {
+  package "Simulation Core" as sim_core {
+    component "SimTopBase\n\nThreadManager\nEventQueue\nGlobal Tick Manager" as simtop
+    component "SimBase\n\ninit()\nstep()\ncleanup()" as simbase
+  }
+  
+  package "Communication" as comm {
+    component "SimPort/SimChannel" as simport
+    component "SimPacket" as simpacket
+    component "Channel Toggle" as channel_toggle
+  }
+  
+  package "Configuration" as config {
+    component "SimConfig (JSON)" as simconfig
+    component "RecycleContainer" as recycle
+  }
+  
+  simtop -down-> simbase
+  simbase -right-> simport
+  simport -right-> simpacket
+}
+
+' SST Integration Bridge
+package "SST Integration Bridge (libacalsim_sst.so)" as sst_bridge #LightYellow {
+  component "ACALSimComponent\n\nclockTick()\ninit()\nsetup()\nfinish()\n\nPhase 1 + Phase 2\nPrimary Component Pattern" as acalsim_comp
+  
+  component "ACALSimSSTEvent\n\nWrapper for SimPacket\nSST::Event interface" as sst_event
+  
+  acalsim_comp -right-> sst_event
+}
+
+' Application Components
+package "Application Components (SST Elements)" as app_layer #Lavender {
+  
+  package "Path A: RISC-V Standalone" as riscv_path {
+    component "RISCVSoCStandalone\n\nacalsim.RISCVSoCStandalone\n\nCPU (RV32I)\nIFStage\nEXEStage\nWBStage\nDataMemory" as riscv_soc
+    
+    file "branch_simple.txt" as asm_file
+    asm_file -right-> riscv_soc
+  }
+  
+  package "Path B: QEMU Integration" as qemu_path {
+    component "QEMUBinaryComponent\n\nqemubinary.QEMUBinary\n\nBinary MMIO protocol\nN-device routing" as qemu_comp
+    
+    interface "Unix Socket\n/tmp/qemu-sst-mmio.sock" as unix_socket
+    qemu_comp -down-> unix_socket
+  }
+  
+  package "Path C: Device Components" as device_path {
+    component "ACALSimDeviceComponent\n\nEcho device" as echo_device
+    component "ACALSimComputeDeviceComponent\n\nGEMM accelerator" as compute_device
+    component "ACALSimVirtIODeviceComponent\n\nVirtIO-SST model" as virtio_device
+    component "HSAComputeComponent\n\nMulti-accelerator" as hsa_compute
+  }
+}
+
+' External Interfaces
+package "External Interfaces & Applications" as external_layer #LightCoral {
+  
+  package "QEMU Full-System" as qemu_system {
+    component "qemu-system-riscv32\n\nLinux 6.18.0-rc6\nDebian rootfs\nVirtIO-SST device" as qemu_binary
+    
+    component "Linux Kernel\n\nvirtio-sst.ko driver\n/dev/sst0 device\nioctl interface" as linux_kernel
+    
+    qemu_binary -down-> linux_kernel
+    linux_kernel -down-> unix_socket
+  }
+  
+  package "PyTorch Device GEMM" as pytorch_path {
+    component "Docker Container\n\nPyTorch 2.x\ndevice_gemm()\nDeviceLinear()" as docker
+    
+    component "Device Server\n\nqemu_device_server_virtio.py\nTCP to VirtIO bridge" as device_server
+    
+    interface "TCP\nport 5555" as tcp_socket
+    docker -down-> tcp_socket
+    tcp_socket -down-> device_server
+    device_server -down-> linux_kernel
+  }
+  
+  package "User Applications" as user_apps {
+    component "HSA Demo\n\nhsa_multi_accel_demo.c" as hsa_demo
+    component "Llama Inference\n\nllama_inference.py\nSST backend" as llama
+    component "Custom Apps\n\nC/C++ Applications\n/dev/sst0 access" as custom_apps
+    
+    hsa_demo -down-> linux_kernel
+    llama -down-> docker
+    custom_apps -down-> linux_kernel
+  }
+}
+
+' Connections Between Layers
+sst_engine -down-> acalsim_comp
+
+acalsim_comp -down-> simtop
+acalsim_comp -down-> simbase
+
+acalsim_comp <|-- riscv_soc
+acalsim_comp <|-- qemu_comp
+acalsim_comp <|-- echo_device
+acalsim_comp <|-- compute_device
+acalsim_comp <|-- virtio_device
+acalsim_comp <|-- hsa_compute
+
+qemu_comp -down-> echo_device
+qemu_comp -down-> compute_device
+qemu_comp -down-> virtio_device
+qemu_comp -down-> hsa_compute
+
+sst_stats <.. riscv_soc
+sst_stats <.. qemu_comp
+sst_stats <.. echo_device
+sst_stats <.. compute_device
+
+' Notes
+note right of sst_core
+  **SST-Core Framework**
+  External simulation toolkit
+  Version 12.0+
+  
+  Provides:
+  • Event-driven engine
+  • Component lifecycle
+  • Python configuration
+end note
+
+note right of acalsim_core
+  **ACALSim Core**
+  Event-driven simulation framework
+  
+  Key Features:
+  • 2-phase execution
+  • Fast-forward optimization
+  • Port/Channel communication
+end note
+
+note right of sst_bridge
+  **Integration Bridge**
+  Maps ACALSim to SST
+  
+  Key Patterns:
+  • 1 SST cycle = 1 iteration
+  • clockTick() runs both phases
+  • Primary component pattern
+  • return false = continue
+  • return true = stop
+end note
+
+note bottom of riscv_path
+  **Status: WORKING**
+  
+  Examples:
+  • riscv_single_core.py
+  • riscv_dual_core.py
+  
+  Assembly programs:
+  • branch_simple.txt
+  • load_store_simple.txt
+end note
+
+note bottom of qemu_path
+  **Status: PRODUCTION READY**
+  
+  Features:
+  • Binary MMIO protocol
+  • 10x faster than text protocol
+  • N-device routing
+  • ~100us latency
+  • ~10K tx/sec throughput
+end note
+
+note bottom of device_path
+  **Device Types:**
+  
+  • Echo Device
+    Simple register-based I/O
+  
+  • Compute Device
+    GEMM operations
+    Cycle-accurate
+  
+  • VirtIO Device
+    PyTorch offloading
+  
+  • HSA Device
+    Multi-accelerator
+end note
+
+note bottom of pytorch_path
+  **PyTorch GEMM Offloading**
+  Status: PRODUCTION READY
+  
+  Flow:
+  PyTorch -> TCP -> QEMU ->
+  VirtIO -> SST
+  
+  Performance:
+  • ~1ms latency per GEMM
+  • ±1% accuracy vs hardware
+end note
+
+@enduml
+
